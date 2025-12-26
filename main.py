@@ -210,6 +210,56 @@ async def chat(request: Request):
 async def models():
     return await provider.get_models()
 
+# ==================== Conversation Management API ====================
+@app.get("/api/conversations")
+async def get_conversations():
+    """Get conversation statistics"""
+    stats = provider.conversation_manager.get_stats()
+    return JSONResponse(content={
+        "success": True,
+        "stats": stats
+    })
+
+@app.post("/api/conversations/reset")
+async def reset_conversation(request: Request):
+    """Reset a specific conversation or all conversations"""
+    try:
+        data = await request.json()
+        conversation_id = data.get("conversation_id", "default")
+        
+        await provider.conversation_manager.reset_conversation(conversation_id)
+        
+        return JSONResponse(content={
+            "success": True,
+            "message": f"✅ Conversation '{conversation_id}' has been reset"
+        })
+    except Exception as e:
+        return JSONResponse(content={
+            "success": False,
+            "message": f"❌ Failed to reset conversation: {str(e)}"
+        })
+
+@app.post("/api/conversations/reset-all")
+async def reset_all_conversations():
+    """Reset all conversations"""
+    try:
+        # Get all conversation IDs
+        stats = provider.conversation_manager.get_stats()
+        conversation_ids = list(stats.get("conversations", {}).keys())
+        
+        for cid in conversation_ids:
+            await provider.conversation_manager.reset_conversation(cid)
+        
+        return JSONResponse(content={
+            "success": True,
+            "message": f"✅ Reset {len(conversation_ids)} conversations"
+        })
+    except Exception as e:
+        return JSONResponse(content={
+            "success": False,
+            "message": f"❌ Failed to reset conversations: {str(e)}"
+        })
+
 # ==================== 账号管理 API ====================
 @app.get("/api/accounts")
 async def get_accounts():

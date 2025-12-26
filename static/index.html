@@ -363,6 +363,43 @@
                     </div>
                 </div>
 
+                <!-- 会话管理 -->
+                <div class="card p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="card-title fw-bold mb-0">
+                            <i class="fas fa-comments me-2"></i>会话管理
+                        </h6>
+                        <button class="btn btn-sm btn-outline-danger" id="resetAllConversationsBtn" title="重置所有会话">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">活跃会话:</span>
+                            <span class="badge bg-info" id="activeConversations">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">最大轮次:</span>
+                            <span id="maxTurnsPerConv">50</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">最大会话数:</span>
+                            <span id="maxConversations">10</span>
+                        </div>
+                    </div>
+                    <div class="mt-2" id="conversationsList" style="max-height: 150px; overflow-y: auto;">
+                        <div class="text-center text-muted small py-2">
+                            暂无活跃会话
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-muted d-block">
+                            <i class="fas fa-info-circle me-1"></i>
+                            每个会话最多50轮对话，超过后自动创建新会话
+                        </small>
+                    </div>
+                </div>
+
                 <!-- API 端点 -->
                 <div class="card p-3 mb-3">
                     <h6 class="card-title fw-bold"><i class="fas fa-code me-2"></i>API 端点</h6>
@@ -377,10 +414,10 @@
                             <small class="text-info">GET</small> /api/system/status
                         </div>
                         <div class="api-box mb-1">
-                            <small class="text-info">GET</small> /api/files/list
+                            <small class="text-info">GET</small> /api/conversations
                         </div>
                         <div class="api-box">
-                            <small class="text-info">GET</small> /api/logs/live
+                            <small class="text-info">POST</small> /api/conversations/reset
                         </div>
                     </div>
                     <div class="mt-2">
@@ -501,6 +538,7 @@
             loadLogs();
             loadApiKey();
             loadModels();
+            loadConversations();
         }
 
         // 加载系统状态
@@ -794,6 +832,119 @@
                 .catch(console.error);
         }
 
+        // 加载会话列表
+        function loadConversations() {
+            fetch('/api/conversations')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.stats) {
+                        const stats = data.stats;
+                        
+                        // 更新统计数字
+                        document.getElementById('activeConversations').textContent = stats.active_conversations || 0;
+                        document.getElementById('maxTurnsPerConv').textContent = stats.max_turns_per_conversation || 50;
+                        document.getElementById('maxConversations').textContent = stats.max_conversations || 10;
+                        
+                        // 更新会话列表
+                        const listContainer = document.getElementById('conversationsList');
+                        const conversations = stats.conversations || {};
+                        const convIds = Object.keys(conversations);
+                        
+                        if (convIds.length === 0) {
+                            listContainer.innerHTML = `
+                                <div class="text-center text-muted small py-2">
+                                    暂无活跃会话
+                                </div>
+                            `;
+                        } else {
+                            let html = '';
+                            convIds.forEach(cid => {
+                                const conv = conversations[cid];
+                                const turnCount = conv.turn_count || 0;
+                                const maxTurns = stats.max_turns_per_conversation || 50;
+                                const progress = Math.min(100, (turnCount / maxTurns) * 100);
+                                const progressColor = progress > 80 ? 'danger' : progress > 50 ? 'warning' : 'success';
+                                
+                                html += `
+                                    <div class="border rounded p-2 mb-2 bg-light">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="fw-bold text-truncate" style="max-width: 100px;" title="${cid}">${cid}</small>
+                                            <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="resetConversation('${cid}')" title="重置此会话">
+                                                <i class="fas fa-times" style="font-size: 10px;"></i>
+                                            </button>
+                                        </div>
+                                        <div class="progress mt-1" style="height: 4px;">
+                                            <div class="progress-bar bg-${progressColor}" style="width: ${progress}%"></div>
+                                        </div>
+                                        <div class="d-flex justify-content-between mt-1">
+                                            <small class="text-muted" style="font-size: 10px;">轮次: ${turnCount}/${maxTurns}</small>
+                                            <small class="text-muted" style="font-size: 10px;">${conv.has_backend_uuid ? '✅' : '🆕'}</small>
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                            listContainer.innerHTML = html;
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('加载会话失败:', err);
+                });
+        }
+
+        // 重置单个会话
+        function resetConversation(conversationId) {
+            if (!confirm(`确定要重置会话 "${conversationId}" 吗？\n\n这将清除该会话的上下文记忆。`)) {
+                return;
+            }
+            
+            fetch('/api/conversations/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversation_id: conversationId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`✅ 会话 "${conversationId}" 已重置`, 'success');
+                    loadConversations();
+                } else {
+                    alert(`❌ 重置失败: ${data.message}`);
+                }
+            })
+            .catch(err => {
+                alert(`❌ 请求失败: ${err.message}`);
+            });
+        }
+
+        // 重置所有会话
+        function resetAllConversations() {
+            if (!confirm('确定要重置所有会话吗？\n\n这将清除所有会话的上下文记忆。')) {
+                return;
+            }
+            
+            fetch('/api/conversations/reset-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    loadConversations();
+                } else {
+                    alert(`❌ 重置失败: ${data.message}`);
+                }
+            })
+            .catch(err => {
+                alert(`❌ 请求失败: ${err.message}`);
+            });
+        }
+
+        // 导出为全局函数
+        window.resetConversation = resetConversation;
+        window.resetAllConversations = resetAllConversations;
+
         // 更新实时日志
         function updateLiveLogs() {
             if (systemState.isLogPaused) return;
@@ -848,6 +999,11 @@
             setInterval(() => {
                 if (isPageVisible) loadLogs();
             }, 30000);
+            
+            // 会话每15秒更新一次（页面可见时）
+            setInterval(() => {
+                if (isPageVisible) loadConversations();
+            }, 15000);
         }
 
         // 格式化文件大小
@@ -956,6 +1112,11 @@
                         })
                         .catch(console.error);
                 }
+            });
+
+            // 重置所有会话按钮
+            safeAddEventListener('resetAllConversationsBtn', 'click', function() {
+                resetAllConversations();
             });
 
             // 清理缓存

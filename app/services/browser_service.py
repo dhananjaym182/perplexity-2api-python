@@ -3,25 +3,188 @@ import asyncio
 import os
 import time
 import json
+import platform
+import subprocess
+import signal
+import urllib.request
+from urllib.error import URLError, HTTPError
 from typing import Dict, Any, List
 from botasaurus.browser_decorator import browser
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Detect if running in WSL
+def is_wsl():
+    """Check if running in Windows Subsystem for Linux"""
+    try:
+        with open('/proc/version', 'r') as f:
+            return 'microsoft' in f.read().lower()
+    except:
+        return 'microsoft' in platform.uname().release.lower() or 'wsl' in platform.uname().release.lower()
+
+IS_WSL = is_wsl()
+
+# Detect Chrome path for WSL/Linux
+def get_chrome_path():
+    """Detect Chrome executable path, supporting WSL"""
+    # Try Linux Chrome paths first (preferred in WSL2)
+    linux_chrome_paths = [
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        os.path.expanduser("~/.local/bin/google-chrome"),
+    ]
+    for path in linux_chrome_paths:
+        if os.path.exists(path):
+            logger.info(f"🔍 Found Linux Chrome at: {path}")
+            return path
+    
+    if IS_WSL:
+        # In WSL, try Windows Chrome as fallback
+        windows_chrome_paths = [
+            "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
+            "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+        ]
+        for path in windows_chrome_paths:
+            if os.path.exists(path):
+                logger.info(f"🔍 Found Windows Chrome at: {path}")
+                return path
+    
+    # Return None to let Botasaurus auto-detect
+    return None
+
+CHROME_PATH = get_chrome_path()
+
+# Additional Chrome arguments for headless/server environments (especially WSL2)
+CHROME_ARGS = [
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--disable-extensions',
+    '--disable-background-networking',
+    '--disable-default-apps',
+    '--disable-sync',
+    '--no-first-run',
+    '--disable-setuid-sandbox',
+    # '--single-process',  # REMOVED: causes Chrome to crash/become defunct
+    '--disable-features=VizDisplayCompositor',  # Helps with headless mode
+    '--remote-debugging-port=0',  # Let Chrome pick a random port
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--disable-hang-monitor',
+    '--disable-ipc-flooding-protection',
+    '--disable-popup-blocking',
+    '--disable-prompt-on-repost',
+    '--disable-breakpad',  # Disable crash reporter
+    '--metrics-recording-only',
+    '--no-default-browser-check',
+    '--password-store=basic',
+    '--use-mock-keychain',
+]
+
 # Botasaurus 浏览器配置
 BROWSER_OPTIONS = {
     "headless": True,
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "window_size": (1366, 768)
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.147 Safari/537.36",
+    "window_size": (1366, 768),
+    "add_arguments": CHROME_ARGS,
 }
 
+# Add chrome_executable_path if detected
+if CHROME_PATH:
+    BROWSER_OPTIONS["chrome_executable_path"] = CHROME_PATH
+
+# Monkey-patch botasaurus_driver to increase Chrome startup timeout for WSL2
+def patch_botasaurus_chrome_timeout():
+    """Increase Chrome connection timeout for WSL2 environments"""
+    try:
+        import botasaurus_driver.core.browser as browser_module
+        
+        original_ensure_chrome_is_alive = browser_module.ensure_chrome_is_alive
+        
+        def patched_ensure_chrome_is_alive(url):
+            """Patched version with longer timeout for WSL2"""
+            start_time = time.time()
+            timeout = 15  # Increased timeout per request (was 10)
+            duration = 90  # Increased total duration (was 45) for slow WSL2 startup
+            retry_delay = 1.0  # Increased delay between retries (was 0.5)
+            
+            logger.info(f"🔄 Waiting for Chrome at {url} (max {duration}s)...")
+            
+            attempt = 0
+            while time.time() - start_time < duration:
+                attempt += 1
+                try:
+                    req = urllib.request.Request(url)
+                    with urllib.request.urlopen(req, timeout=timeout) as response:
+                        if response.status == 200:
+                            data = response.read().decode('utf-8')
+                            elapsed = time.time() - start_time
+                            logger.info(f"✅ Chrome connected in {elapsed:.1f}s (attempt {attempt})")
+                            return json.loads(data)
+                except (URLError, HTTPError) as e:
+                    elapsed = time.time() - start_time
+                    if attempt % 5 == 0:  # Log every 5 attempts
+                        logger.info(f"⏳ Still waiting for Chrome... ({elapsed:.1f}s, attempt {attempt})")
+                    time.sleep(retry_delay)
+                    continue
+                except Exception as e:
+                    elapsed = time.time() - start_time
+                    logger.warning(f"⚠️ Unexpected error connecting to Chrome (attempt {attempt}, {elapsed:.1f}s): {e}")
+                    time.sleep(retry_delay)
+                    continue
+            
+            elapsed = time.time() - start_time
+            raise Exception(f"Failed to connect to Chrome URL: {url} after {elapsed:.1f}s ({attempt} attempts). Chrome may have failed to start.")
+        
+        # Apply the patch
+        browser_module.ensure_chrome_is_alive = patched_ensure_chrome_is_alive
+        logger.info("✅ Patched botasaurus Chrome timeout for WSL2 compatibility (90s timeout)")
+        
+    except Exception as e:
+        logger.warning(f"⚠️ Could not patch botasaurus timeout: {e}")
+
+# Apply the patch at module load time
+patch_botasaurus_chrome_timeout()
+
+# Check if we have a display available (for non-headless mode)
+def has_display():
+    """Check if a display is available for GUI applications"""
+    display = os.environ.get('DISPLAY')
+    wayland = os.environ.get('WAYLAND_DISPLAY')
+    # Check for WSLg
+    wslg = os.path.exists('/mnt/wslg')
+    return bool(display or wayland or wslg)
+
+HAS_DISPLAY = has_display()
+
 # 交互式登录配置（显示浏览器窗口）
-INTERACTIVE_BROWSER_OPTIONS = {
-    "headless": False,
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "window_size": (1280, 800)
-}
+# If no display is available, fall back to headless mode with xvfb or just headless
+if HAS_DISPLAY:
+    INTERACTIVE_BROWSER_OPTIONS = {
+        "headless": False,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.147 Safari/537.36",
+        "window_size": (1280, 800),
+        "add_arguments": CHROME_ARGS,  # Use same args for stability
+    }
+else:
+    # No display available - use headless mode for interactive login
+    # User will need to use Cookie import instead of browser login
+    logger.warning("⚠️ No display available - interactive browser login will use headless mode")
+    INTERACTIVE_BROWSER_OPTIONS = {
+        "headless": True,  # Fall back to headless since no display
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.147 Safari/537.36",
+        "window_size": (1280, 800),
+        "add_arguments": CHROME_ARGS,
+    }
+
+# Add chrome_executable_path if detected
+if CHROME_PATH:
+    INTERACTIVE_BROWSER_OPTIONS["chrome_executable_path"] = CHROME_PATH
 
 class BrowserService:
     def __init__(self):
@@ -64,31 +227,46 @@ class BrowserService:
                         user_agent = cookie_data.get("user_agent", self.cached_user_agent)
                         
                         if cookies_dict:
-                            # 清理 Cookie 键名：使用正则表达式提取有效的 cookie 名称
+                            # 清理 Cookie 键名和值：移除 PowerShell/CMD 转义字符
                             cleaned_cookies = {}
                             import re
-                            # 有效的 cookie 名称模式：字母、数字、点、连字符、下划线
-                            cookie_name_pattern = r'[a-zA-Z0-9._-]+'
+                            
                             for key, value in cookies_dict.items():
-                                # 查找所有可能的 cookie 名称匹配
-                                matches = re.findall(cookie_name_pattern, key)
-                                if matches:
-                                    # 选择最长的匹配（通常是最完整的 cookie 名称）
-                                    cleaned_key = max(matches, key=len)
-                                    # 特殊处理：确保关键 cookie 名称标准化
-                                    if "pplx.visitor-id" in cleaned_key.lower():
-                                        cleaned_key = "pplx.visitor-id"
-                                    elif "session-token" in cleaned_key.lower():
-                                        cleaned_key = "__Secure-next-auth.session-token"
-                                    elif "cf_clearance" in cleaned_key.lower():
-                                        cleaned_key = "cf_clearance"
-                                else:
-                                    # 如果没有找到有效匹配，使用原始键名并清理转义字符
-                                    cleaned_key = key.replace('^\"', '').replace('\"', '').strip()
-                                cleaned_cookies[cleaned_key] = value
+                                # 清理键名：移除各种转义字符
+                                cleaned_key = key
+                                # 移除开头的 "-b ^\"" 或类似前缀
+                                cleaned_key = re.sub(r'^-[a-z]\s*\^?"?', '', cleaned_key)
+                                # 移除 ^" 和 ^% 转义
+                                cleaned_key = cleaned_key.replace('^"', '').replace('^%', '%')
+                                # 移除引号
+                                cleaned_key = cleaned_key.replace('"', '').replace("'", '')
+                                # 移除开头/结尾空白
+                                cleaned_key = cleaned_key.strip()
+                                
+                                # 清理值：移除转义字符
+                                cleaned_value = value
+                                if isinstance(cleaned_value, str):
+                                    cleaned_value = cleaned_value.replace('^"', '').replace('^%', '%')
+                                    cleaned_value = cleaned_value.replace('^', '').strip()
+                                    # 移除末尾的引号
+                                    cleaned_value = cleaned_value.rstrip('"').rstrip("'")
+                                
+                                # 特殊处理：确保关键 cookie 名称标准化
+                                if "pplx.visitor-id" in cleaned_key:
+                                    cleaned_key = "pplx.visitor-id"
+                                elif "__Secure-next-auth.session-token" in cleaned_key:
+                                    cleaned_key = "__Secure-next-auth.session-token"
+                                elif "cf_clearance" in cleaned_key:
+                                    cleaned_key = "cf_clearance"
+                                elif "__cf_bm" in cleaned_key:
+                                    cleaned_key = "__cf_bm"
+                                elif "__cflb" in cleaned_key:
+                                    cleaned_key = "__cflb"
+                                
+                                cleaned_cookies[cleaned_key] = cleaned_value
                                 # 调试日志：显示清理前后的键名
-                                if key != cleaned_key:
-                                    logger.debug(f"Cookie 键名清理: '{key}' -> '{cleaned_key}'")
+                                if key != cleaned_key or value != cleaned_value:
+                                    logger.debug(f"Cookie 清理: '{key}' -> '{cleaned_key}'")
                             
                             self.cached_cookies = cleaned_cookies
                             self.cached_user_agent = user_agent
@@ -125,8 +303,8 @@ class BrowserService:
             logger.error(f"❌ 初始化过程中出现意外错误: {e}")
             logger.info("💡 服务将继续启动，但请通过 Web UI 添加账号")
 
-    @browser(**BROWSER_OPTIONS)
     @staticmethod
+    @browser(**BROWSER_OPTIONS)
     def _refresh_cookies_with_browser(driver, data) -> Dict[str, str]:
         """
         Botasaurus 核心函数：访问页面，处理验证，返回最新 Cookie
@@ -361,7 +539,7 @@ class BrowserService:
         
         return {
             "Host": "www.perplexity.ai",
-            "User-Agent": user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.147 Safari/537.36",
             "Accept": "text/event-stream",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             "Accept-Encoding": "gzip, deflate, br, zstd",
@@ -540,8 +718,8 @@ class BrowserService:
         except Exception:
             return default_value
 
-    @browser(**INTERACTIVE_BROWSER_OPTIONS)
     @staticmethod
+    @browser(**INTERACTIVE_BROWSER_OPTIONS)
     def _interactive_login_with_browser(driver, data) -> Dict[str, Any]:
         """
         交互式登录：打开浏览器窗口，让用户手动登录，返回 Cookie 和 User-Agent
@@ -787,7 +965,7 @@ class BrowserService:
         
         # 6. 如果还是没有 User-Agent，使用默认值
         if not user_agent:
-            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.147 Safari/537.36"
         
         # 7. 处理结果
         if cookie_str:
@@ -803,6 +981,12 @@ class BrowserService:
             
             # 保存账号数据
             account_dir = self._save_account_data(account_name, cookies_dict, user_agent, source="import")
+            
+            # 同时更新缓存的 Cookie（立即生效）
+            self.cached_cookies = cookies_dict
+            self.cached_user_agent = user_agent
+            self.last_refresh_time = time.time()
+            logger.info(f"✅ 已更新缓存的 Cookie，共 {len(cookies_dict)} 个")
             
             return {
                 "success": True,
