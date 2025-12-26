@@ -191,6 +191,7 @@ You are encouraged to:
 <div align="center">
 
 **Made with ❤️ by lza6**
+**Converted and Updated with ❤️ by Jay**
 
 *Technology should make humans more free, not more constrained.*
 
