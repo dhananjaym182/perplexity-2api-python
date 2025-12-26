@@ -216,7 +216,7 @@ class PerplexityProvider(BaseProvider):
         headers["x-request-id"] = request_id
         cookies = self.solver.get_cookies()
 
-        logger.info(f"=== 发送请求 [{request_id}] ===")
+        logger.info(f"=== Sending Request [{request_id}] ===")
         logger.debug(f"Query: {query[:100]}...")  # First 100 chars of query
         logger.debug(f"Cookies count: {len(cookies)}")
         logger.debug(f"Cookie keys: {list(cookies.keys())[:10]}...")  # First 10 keys
@@ -245,14 +245,14 @@ class PerplexityProvider(BaseProvider):
                         
                         if response.status_code != 200:
                             error_preview = response.text[:500] if response.text else "No response body"
-                            logger.error(f"上游错误 {response.status_code}: {error_preview}")
+                            logger.error(f"Upstream error {response.status_code}: {error_preview}")
                             logger.debug(f"Request payload: {json.dumps(payload, ensure_ascii=False)[:500]}...")
                             logger.debug(f"Request headers: {headers_with_cookie}")
                             if response.status_code == 403:
-                                logger.warning("⚠️ 检测到 Cloudflare 验证，Cookie 可能已过期。请通过 Web UI 重新导入 Cookie。")
+                                logger.warning("⚠️ Cloudflare verification detected, Cookie may have expired. Please re-import Cookie via Web UI.")
                             elif response.status_code == 422:
-                                logger.warning("⚠️ 422 错误：请求格式可能不正确或查询内容被拒绝。")
-                            yield create_sse_data(create_chat_completion_chunk(request_id, model, f"[Error: Upstream {response.status_code} - Cookie可能已过期，请通过Web UI重新导入Cookie]", "stop"))
+                                logger.warning("⚠️ 422 error: Request format may be incorrect or query content was rejected.")
+                            yield create_sse_data(create_chat_completion_chunk(request_id, model, f"[Error: Upstream {response.status_code} - Cookie may have expired, please re-import via Web UI]", "stop"))
                             yield DONE_CHUNK
                             return
 
@@ -289,12 +289,12 @@ class PerplexityProvider(BaseProvider):
                                                         if step_type == "SEARCH_WEB":
                                                             queries = content.get("queries", [])
                                                             q_str = ", ".join([q["query"] for q in queries])
-                                                            current_full_text += f"> 🔍 正在搜索: {q_str}\n\n"
+                                                            current_full_text += f"> 🔍 Searching: {q_str}\n\n"
                                                         
                                                         elif step_type == "SEARCH_RESULTS":
                                                             results = content.get("web_results", [])
                                                             if results:
-                                                                current_full_text += f"> 📚 找到 {len(results)} 个来源\n\n"
+                                                                current_full_text += f"> 📚 Found {len(results)} sources\n\n"
 
                                                         elif step_type == "FINAL":
                                                             final_answer_raw = content.get("answer")
@@ -355,7 +355,7 @@ class PerplexityProvider(BaseProvider):
                                                 yield create_sse_data(chunk)
 
                                     except Exception as e:
-                                        logger.warning(f"解析失败: {e}")
+                                        logger.warning(f"Parse failed: {e}")
                                         pass
                         
                         if not has_content:
@@ -365,7 +365,7 @@ class PerplexityProvider(BaseProvider):
                         yield DONE_CHUNK
 
                     except Exception as e:
-                        logger.error(f"curl_cffi 流式请求异常: {e}")
+                        logger.error(f"curl_cffi streaming request exception: {e}")
                         yield create_sse_data(create_chat_completion_chunk(request_id, model, f"[Error: {str(e)}]", "stop"))
                         yield DONE_CHUNK
             else:
@@ -385,10 +385,10 @@ class PerplexityProvider(BaseProvider):
                         if response.status_code != 200:
                             error_text = await response.aread()
                             error_preview = error_text.decode('utf-8', errors='ignore')[:500]
-                            logger.error(f"上游错误 {response.status_code}: {error_preview}")
+                            logger.error(f"Upstream error {response.status_code}: {error_preview}")
                             if response.status_code == 403:
-                                logger.warning("⚠️ 检测到 Cloudflare 验证，Cookie 可能已过期。请通过 Web UI 重新导入 Cookie。")
-                            yield create_sse_data(create_chat_completion_chunk(request_id, model, f"[Error: Upstream {response.status_code} - Cookie可能已过期，请通过Web UI重新导入Cookie]", "stop"))
+                                logger.warning("⚠️ Cloudflare verification detected, Cookie may have expired. Please re-import Cookie via Web UI.")
+                            yield create_sse_data(create_chat_completion_chunk(request_id, model, f"[Error: Upstream {response.status_code} - Cookie may have expired, please re-import via Web UI]", "stop"))
                             yield DONE_CHUNK
                             return
 
@@ -419,12 +419,12 @@ class PerplexityProvider(BaseProvider):
                                                 if step_type == "SEARCH_WEB":
                                                     queries = content.get("queries", [])
                                                     q_str = ", ".join([q["query"] for q in queries])
-                                                    current_full_text += f"> 🔍 正在搜索: {q_str}\n\n"
+                                                    current_full_text += f"> 🔍 Searching: {q_str}\n\n"
                                                 
                                                 elif step_type == "SEARCH_RESULTS":
                                                     results = content.get("web_results", [])
                                                     if results:
-                                                        current_full_text += f"> 📚 找到 {len(results)} 个来源\n\n"
+                                                        current_full_text += f"> 📚 Found {len(results)} sources\n\n"
 
                                                 elif step_type == "FINAL":
                                                     final_answer_raw = content.get("answer")
@@ -485,7 +485,7 @@ class PerplexityProvider(BaseProvider):
                                         yield create_sse_data(chunk)
 
                             except Exception as e:
-                                logger.warning(f"解析失败: {e}")
+                                logger.warning(f"Parse failed: {e}")
                                 pass
                         
                         if not has_content:
@@ -495,7 +495,7 @@ class PerplexityProvider(BaseProvider):
                         yield DONE_CHUNK
 
                 except Exception as e:
-                    logger.error(f"流式请求异常: {e}")
+                    logger.error(f"Streaming request exception: {e}")
                     yield create_sse_data(create_chat_completion_chunk(request_id, model, f"[Error: {str(e)}]", "stop"))
                     yield DONE_CHUNK
                 finally:

@@ -565,7 +565,7 @@ async def get_system_info():
         "host_name": platform.node(),
         "working_dir": os.getcwd(),
         "platform": platform.platform(),
-        "uptime": "刚刚启动",  # 简化版本
+        "uptime": "Just started",  # Simplified version
         "start_time": datetime.now().isoformat()
     }
     

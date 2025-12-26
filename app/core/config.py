@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     TARGET_URL: str = "https://www.perplexity.ai"
     API_URL: str = "https://www.perplexity.ai/rest/sse/perplexity_ask"
 
-    # 从 .env 读取
+    # Read from .env
     PPLX_COOKIE: str = ""
     PPLX_USER_AGENT: str = ""
 
@@ -28,14 +28,14 @@ class Settings(BaseSettings):
     DEFAULT_MODEL: str = "gemini30pro"
 
     def get_initial_cookies_dict(self) -> List[Dict[str, str]]:
-        """解析 Cookie 字符串"""
+        """Parse Cookie string"""
         cookies = []
         raw_cookie = self.PPLX_COOKIE
         
         if not raw_cookie:
             return cookies
         
-        # 清洗：去除可能存在的首尾引号（如果 .env 解析器没处理的话）
+        # Clean: remove possible leading/trailing quotes (if .env parser didn't handle it)
         if raw_cookie.startswith('"') and raw_cookie.endswith('"'):
             raw_cookie = raw_cookie[1:-1]
         
