@@ -21,12 +21,12 @@ try:
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
-    logger.warning("psutil 未安装，系统监控功能将受限。运行: pip install psutil")
+    logger.warning("psutil not installed, system monitoring features will be limited. Run: pip install psutil")
 
 from app.core.config import settings
 from app.providers.perplexity_provider import PerplexityProvider
 
-# [修改] 设置日志级别为 DEBUG，格式包含文件名和行号
+# [Modified] Set log level to DEBUG, format includes filename and line number
 logger.remove()
 logger.add(
     sys.stdout, 
@@ -36,7 +36,7 @@ logger.add(
 
 provider = PerplexityProvider()
 
-# 模拟账号数据存储（实际应使用数据库）
+# Simulated account data storage (should use database in production)
 accounts_db: Dict[str, Dict[str, Any]] = {}
 logs_db: List[Dict[str, Any]] = []
 custom_models: List[Dict[str, Any]] = [
@@ -46,26 +46,26 @@ custom_models: List[Dict[str, Any]] = [
 ]
 
 def load_accounts_from_sessions():
-    """从 data/sessions/ 目录加载已保存的账号到 accounts_db"""
+    """Load saved accounts from data/sessions/ directinto accounts_db"""
     sessions_dir = Path("data/sessions")
     if not sessions_dir.exists():
-        logger.info("📁 未找到 sessions 目录，跳过账号加载")
+        logger.info("📁 Sessions directory not found, skipping account loading")
         return
     
     for session_file in sessions_dir.glob("*.json"):
         try:
-            logger.debug(f"处理会话文件: {session_file}")
+            logger.debug(f"Processing session file: {session_file}")
             with open(session_file, 'r', encoding='utf-8') as f:
                 session_data = json.load(f)
             
             account_name = session_data.get("account_name")
             if not account_name:
-                logger.warning(f"⚠️ 会话文件缺少账号名称: {session_file}")
+                logger.warning(f"⚠️ Session file missing account name: {session_file}")
                 continue
             
-            logger.info(f"📂 找到账号: {account_name}")
+            logger.info(f"📂 Found account: {account_name}")
             
-            # 检查是否已存在相同账号名的记录（避免重复）
+            # Check if account with same name already exists (avoid duplicates)
             existing_account = None
             for acc_id, acc in accounts_db.items():
                 if acc.get("name") == account_name:
@@ -73,27 +73,27 @@ def load_accounts_from_sessions():
                     break
             
             if existing_account:
-                # 更新现有记录
+                # Update existing record
                 account_id = existing_account
-                logger.debug(f"📝 更新现有账号: {account_name}")
+                logger.debug(f"📝 Updating existing account: {account_name}")
             else:
-                # 创建新记录
+                # Create new record
                 account_id = str(uuid.uuid4())[:8]
-                logger.info(f"📂 加载账号: {account_name} (会话文件: {session_file.name})")
+                logger.info(f"📂 Loading account: {account_name} (session file: {session_file.name})")
             
-            # 获取 Cookie 文件信息 - 增强路径处理
+            # Get Cookie file info - enhanced path handling
             cookie_file = session_data.get("cookie_file", "")
             cookie_count = 0
             cookie_file_path = None
             
             if cookie_file:
-                # 尝试直接路径
+                # Try direct path
                 cookie_file_path = Path(cookie_file)
                 if not cookie_file_path.exists():
-                    # 尝试相对当前工作目录
+                    # Try relative to current working directory
                     cookie_file_path = Path.cwd() / cookie_file
                     if not cookie_file_path.exists():
-                        # 尝试从 directory_info 获取
+                        # Try to get from directory_info
                         dir_info = session_data.get("directory_info", {})
                         cookie_json = dir_info.get("cookie_json", "")
                         if cookie_json:
@@ -101,7 +101,7 @@ def load_accounts_from_sessions():
                             if not cookie_file_path.exists():
                                 cookie_file_path = Path.cwd() / cookie_json
                         else:
-                            # 尝试在 data/cookies/账号名/ 下查找
+                            # Try to find in data/cookies/account_name/
                             candidate = Path("data/cookies") / account_name / "cookies.json"
                             if candidate.exists():
                                 cookie_file_path = candidate
@@ -111,60 +111,60 @@ def load_accounts_from_sessions():
                         with open(cookie_file_path, 'r', encoding='utf-8') as cf:
                             cookie_data = json.load(cf)
                         cookie_count = cookie_data.get("cookie_count", 0)
-                        logger.debug(f"✅ 成功读取 Cookie 文件: {cookie_file_path}, cookie_count: {cookie_count}")
+                        logger.debug(f"✅ Successfully read Cookie file: {cookie_file_path}, cookie_count: {cookie_count}")
                     except Exception as e:
-                        logger.warning(f"⚠️ 读取 Cookie 文件失败 {cookie_file_path}: {e}")
+                        logger.warning(f"⚠️ Failed to read Cookie file {cookie_file_path}: {e}")
                 else:
-                    logger.warning(f"⚠️ Cookie 文件不存在: {cookie_file}，尝试的路径: {cookie_file_path}")
+                    logger.warning(f"⚠️ Cookie file does not exist: {cookie_file}, tried path: {cookie_file_path}")
             else:
-                logger.warning(f"⚠️ 会话文件中未指定 cookie_file 字段")
+                logger.warning(f"⚠️ cookie_file field not specified in session file")
             
-            # 获取目录信息
+            # Get directory info
             dir_info = session_data.get("directory_info", {})
             account_dir = dir_info.get("account_dir", f"data/cookies/{account_name}")
             cookie_json = dir_info.get("cookie_json", "")
             cookie_txt = dir_info.get("cookie_txt", "")
             
-            # 创建账号记录（结构与 Web UI 添加的一致）
+            # Create account record (structure consistent with Web UI additions)
             account_record = {
                 "id": account_id,
                 "name": account_name,
                 "is_active": True,
                 "token_source": session_data.get("source", "unknown"),
                 "data_dir": account_dir,
-                "token": "本地保存的Cookie",
+                "token": "Locally saved Cookie",
                 "expires_at": (datetime.now() + timedelta(days=30)).isoformat(),
                 "total_calls": session_data.get("stats", {}).get("total_calls", 0),
                 "discord_username": None,
                 "created_at": datetime.fromtimestamp(session_data.get("created_at", time.time())).isoformat(),
                 "cookie_count": cookie_count,
-                "user_agent_preview": "",  # 可从 Cookie 文件获取，但简化处理
+                "user_agent_preview": "",  # Can be obtained from Cookie file, but simplified
                 "local_saved": True,
                 "cookie_files": [cookie_json, cookie_txt]
             }
             accounts_db[account_id] = account_record
-            logger.info(f"✅ 成功加载账号: {account_name} (ID: {account_id}, Cookie数量: {cookie_count})")
+            logger.info(f"✅ Successfully loaded account: {account_name} (ID: {account_id}, Cookie count: {cookie_count})")
             
         except Exception as e:
-            logger.error(f"❌ 加载会话文件失败 {session_file}: {e}")
+            logger.error(f"❌ Failed to load session file {session_file}: {e}")
             import traceback
             traceback.print_exc()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"启动 {settings.APP_NAME} v{settings.APP_VERSION} (Botasaurus Deep Debug Mode)...")
-    logger.info("正在初始化 Botasaurus 浏览器服务...")
+    logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} (Botasaurus Deep Debug Mode)...")
+    logger.info("Initializing Botasaurus browser service...")
     try:
-        # 先加载本地保存的账号
+        # Load locally saved accounts first
         load_accounts_from_sessions()
-        logger.info(f"📊 已加载 {len(accounts_db)} 个本地账号")
+        logger.info(f"📊 Loaded {len(accounts_db)} local accounts")
         
-        # 再初始化 Botasaurus
+        # Then initialize Botasaurus
         await provider.solver.initialize_session()
     except Exception as e:
-        logger.error(f"初始化失败: {e}")
+        logger.error(f"Initialization failed: {e}")
     yield
-    logger.info("服务关闭。")
+    logger.info("Service shutdown.")
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
@@ -183,28 +183,28 @@ async def verify_key(authorization: str = Header(None)):
         if not authorization or authorization.split(" ")[1] != settings.API_MASTER_KEY:
             raise HTTPException(403, "Invalid API Key")
 
-# ==================== 原有 API ====================
+# ==================== Original API ====================
 @app.post("/v1/chat/completions", dependencies=[Depends(verify_key)])
 async def chat(request: Request):
     try:
         data = await request.json()
-        # [新增] 打印客户端原始请求
-        logger.debug(f"收到客户端请求: {data}")
+        # [Added] Print client raw request
+        logger.debug(f"Received client request: {data}")
         
-        # 检查provider是否就绪
+        # Check if provider is ready
         if not hasattr(provider, 'solver'):
-            raise HTTPException(503, "服务正在初始化，请稍后重试或通过Web UI添加账号")
+            raise HTTPException(503, "Service is initializing, please try again later or add account via Web UI")
         
-        # 检查是否有可用的 Cookie
+        # Check if valid Cookie is available
         if not provider.solver.get_cookies():
-            raise HTTPException(400, "未找到有效的 Cookie，请通过 Web UI 添加账号或导入 Cookie")
+            raise HTTPException(400, "No valid Cookie found, please add account or import Cookie via Web UI")
         
         return await provider.chat_completion(data)
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Request Error: {e}")
-        raise HTTPException(500, f"内部服务器错误: {str(e)}")
+        raise HTTPException(500, f"Internal server error: {str(e)}")
 
 @app.get("/v1/models")
 async def models():
@@ -260,10 +260,10 @@ async def reset_all_conversations():
             "message": f"❌ Failed to reset conversations: {str(e)}"
         })
 
-# ==================== 账号管理 API ====================
+# ==================== Account Management API ====================
 @app.get("/api/accounts")
 async def get_accounts():
-    """获取所有账号列表"""
+    """Get all accounts list"""
     accounts = list(accounts_db.values())
     active_count = sum(1 for acc in accounts if acc.get("is_active", False))
     inactive_count = len(accounts) - active_count
@@ -276,40 +276,40 @@ async def get_accounts():
 
 @app.post("/api/account/login/start")
 async def start_login(name: str = Form(...)):
-    """启动真实浏览器登录（使用 Botasaurus）"""
+    """Start real browser login (using Botasaurus)"""
     import asyncio
     
     account_id = str(uuid.uuid4())[:8]
     
     try:
-        logger.info(f"🔄 开始交互式登录流程，账号: {name}")
+        logger.info(f"🔄 Starting interactive login process, account: {name}")
         
-        # 设置超时（5分钟）
+        # Set timeout (5 minutes)
         try:
             result = await asyncio.wait_for(
                 provider.solver.interactive_login(name),
-                timeout=300  # 5分钟
+                timeout=300  # 5 minutes
             )
         except asyncio.TimeoutError:
-            logger.warning(f"⏱️ 登录超时，账号: {name}")
+            logger.warning(f"⏱️ Login timeout, account: {name}")
             return JSONResponse(content={
                 "success": False,
-                "message": "❌ 登录超时（5分钟）。请检查浏览器窗口是否正常打开。",
+                "message": "❌ Login timeout (5 minutes). Please check if browser window opened properly.",
                 "account_id": account_id
             })
         
         if result.get("success"):
-            # 使用实际的账号目录
+            # Use actual account directory
             account_dir = result.get("account_dir", f"data/cookies/{name}")
             
-            # 创建账号记录
+            # Create account record
             new_account = {
                 "id": account_id,
                 "name": name,
                 "is_active": True,
                 "token_source": "browser",
                 "data_dir": account_dir,
-                "token": "真实Token（已保存至本地）",
+                "token": "Real Token (saved locally)",
                 "expires_at": (datetime.now() + timedelta(days=30)).isoformat(),
                 "total_calls": 0,
                 "discord_username": None,
@@ -324,21 +324,21 @@ async def start_login(name: str = Form(...)):
             }
             accounts_db[account_id] = new_account
             
-            # 添加日志
+            # Add log
             logs_db.append({
                 "timestamp": datetime.now().isoformat(),
                 "account_name": name,
                 "model": "N/A",
                 "duration": 0,
                 "status": "SUCCESS",
-                "note": f"交互式登录成功，数据保存到: {account_dir}",
+                "note": f"Interactive login successful, data saved to: {account_dir}",
                 "level": "info"
             })
             
-            logger.info(f"✅ 交互式登录成功，账号: {name}, 数据目录: {account_dir}")
+            logger.info(f"✅ Interactive login successful, account: {name}, data directory: {account_dir}")
             return JSONResponse(content={
                 "success": True,
-                "message": f"✅ 登录成功！已获取 {result.get('cookie_count', 0)} 个 Cookie 并保存到本地目录。",
+                "message": f"✅ Login successful! Retrieved {result.get('cookie_count', 0)} Cookies and saved to local directory.",
                 "account_id": account_id,
                 "cookie_count": len(result.get("cookies", {})),
                 "user_agent_preview": result.get("user_agent", "")[:50],
@@ -346,111 +346,120 @@ async def start_login(name: str = Form(...)):
                 "local_saved": result.get("local_saved", False)
             })
         else:
-            error_msg = result.get("error", "未知错误")
-            logger.error(f"❌ 登录失败，账号: {name}, 错误: {error_msg}")
+            error_msg = result.get("error", "Unknown error")
+            logger.error(f"❌ Login failed, account: {name}, error: {error_msg}")
             return JSONResponse(content={
                 "success": False,
-                "message": f"❌ 登录失败: {error_msg}",
+                "message": f"❌ Login failed: {error_msg}",
                 "account_id": account_id
             })
             
     except Exception as e:
-        logger.error(f"❌ 登录过程异常，账号: {name}, 错误: {e}")
+        logger.error(f"❌ Login process exception, account: {name}, error: {e}")
         return JSONResponse(content={
             "success": False,
-            "message": f"❌ 登录过程异常: {str(e)}",
+            "message": f"❌ Login process exception: {str(e)}",
             "account_id": account_id
         })
 
 @app.post("/api/token/refresh/{account_id}")
 async def refresh_token(account_id: str):
-    """刷新账号 Token（模拟）"""
+    """Refresh account Token (simulated)"""
     if account_id not in accounts_db:
-        raise HTTPException(404, "账号不存在")
+        raise HTTPException(404, "Account not found")
     
     account = accounts_db[account_id]
-    account["token"] = "刷新Token_" + str(uuid.uuid4())[:8]
+    account["token"] = "RefreshToken_" + str(uuid.uuid4())[:8]
     account["expires_at"] = (datetime.now() + timedelta(days=30)).isoformat()
     
     return JSONResponse(content={
         "success": True,
-        "message": "✅ Token 刷新成功（模拟）"
+        "message": "✅ Token refresh successful (simulated)"
     })
 
 @app.get("/api/account/toggle/{account_id}")
 async def toggle_account(account_id: str):
-    """启用/禁用账号"""
+    """Enable/Disable account"""
     if account_id not in accounts_db:
-        raise HTTPException(404, "账号不存在")
+        raise HTTPException(404, "Account not found")
     
     account = accounts_db[account_id]
     account["is_active"] = not account.get("is_active", True)
     
     return JSONResponse(content={
         "success": True,
-        "message": "✅ 账号状态已更新",
+        "message": "✅ Account status updated",
         "is_active": account["is_active"]
     })
 
 @app.get("/api/account/delete/{account_id}")
 async def delete_account(account_id: str):
-    """删除账号"""
+    """Delete account"""
     if account_id not in accounts_db:
-        raise HTTPException(404, "账号不存在")
+        raise HTTPException(404, "Account not found")
     
     del accounts_db[account_id]
     
     return JSONResponse(content={
         "success": True,
-        "message": "✅ 账号已删除"
+        "message": "✅ Account deleted"
     })
 
-# ==================== 日志管理 API ====================
+# ==================== Log Management API ====================
 @app.get("/api/logs")
 async def get_logs():
-    """获取最近日志"""
+    """Get recent logs"""
     return JSONResponse(content={
-        "logs": logs_db[-50:]  # 返回最近50条
+        "logs": logs_db[-50:]  # Return last 50 entries
     })
 
 @app.get("/api/logs/clear")
-async def clear_logs():
-    """清空日志"""
+async def clear_logs_get():
+    """Clear logs (GET method for backward compatibility)"""
     logs_db.clear()
     return JSONResponse(content={
         "success": True,
-        "message": "✅ 日志已清空"
+        "message": "✅ Logs cleared"
     })
 
-# ==================== 服务控制 API ====================
-@app.post("/api/service/stop")
-async def stop_service():
-    """停止服务（模拟）"""
+@app.post("/api/logs/clear")
+async def clear_logs_post():
+    """Clear logs (POST method)"""
+    logs_db.clear()
     return JSONResponse(content={
         "success": True,
-        "message": "🛑 服务停止命令已发送（实际需要进程管理）"
+        "message": "✅ Logs cleared"
+    })
+
+# ==================== Service Control API ====================
+@app.post("/api/service/stop")
+async def stop_service():
+    """Stop service (simulated)"""
+    return JSONResponse(content={
+        "success": True,
+        "message": "🛑 Service stop command sent (requires process management)"
     })
 
 @app.post("/api/settings/preview-mode")
 async def set_preview_mode(request: Request):
-    """设置预览模式"""
+    """Set preview mode"""
     data = await request.json()
     enabled = data.get("enabled", False)
     return JSONResponse(content={
         "success": True,
-        "message": f"✅ 预览模式已{'开启' if enabled else '关闭'}"
+        "message": f"✅ Preview mode {'enabled' if enabled else 'disabled'}"
     })
 
 # ==================== Web UI ====================
 @app.get("/", response_class=HTMLResponse)
 async def ui():
-    """提供 Web UI"""
+    """Serve Web UI"""
     with open("static/index.html", "r", encoding="utf-8") as f:
         return f.read()
 
 @app.get("/api/ui-data")
 async def ui_data():
-    """提供 UI 所需数据（供前端 JavaScript 调用）"""
+    """Provide data for UI (for frontend JavaScript calls)"""
     accounts = list(accounts_db.values())
     active_count = sum(1 for acc in accounts if acc.get("is_active", False))
     inactive_count = len(accounts) - active_count
@@ -464,11 +473,11 @@ async def ui_data():
         "version": "3.0"
     })
 
-# ==================== 系统监控 API ====================
+# ==================== System Monitoring API ====================
 
 @app.get("/api/health")
 async def health_check():
-    """健康检查端点"""
+    """Health check endpoint"""
     status = {
         "status": "healthy",
         "service": "perplexity-2api",
@@ -476,9 +485,9 @@ async def health_check():
         "timestamp": datetime.now().isoformat()
     }
     
-    # 检查基本服务状态
+    # Check basic service status
     try:
-        # 检查Botasaurus状态
+        # Check Botasaurus status
         botasaurus_ready = False
         if hasattr(provider, 'solver'):
             solver = provider.solver
@@ -490,7 +499,7 @@ async def health_check():
         status["logs_count"] = len(logs_db)
         
         if not botasaurus_ready:
-            status["warning"] = "Botasaurus 未就绪，请通过Web UI添加账号或检查初始化"
+            status["warning"] = "Botasaurus not ready, please add account via Web UI or check initialization"
         
     except Exception as e:
         status["status"] = "degraded"
@@ -499,7 +508,7 @@ async def health_check():
     return JSONResponse(content=status)
 
 def get_directory_size(path: str) -> int:
-    """计算目录大小（字节）"""
+    """Calculate directory size (bytes)"""
     total = 0
     try:
         for entry in os.scandir(path):
@@ -512,7 +521,7 @@ def get_directory_size(path: str) -> int:
     return total
 
 def format_file_size(size_bytes: int) -> str:
-    """格式化文件大小"""
+    """Format file size"""
     if size_bytes == 0:
         return "0 B"
     units = ["B", "KB", "MB", "GB", "TB"]
@@ -524,18 +533,18 @@ def format_file_size(size_bytes: int) -> str:
 
 @app.get("/api/system/status")
 async def get_system_status():
-    """获取系统状态"""
+    """Get system status"""
     status = {
         "service_status": "running",
         "botasaurus_status": "initializing",
         "total_accounts": len(accounts_db),
         "active_accounts": sum(1 for acc in accounts_db.values() if acc.get("is_active", False)),
         "api_requests": len(logs_db) if logs_db else 0,
-        "memory_usage": 30,  # 默认值
+        "memory_usage": 30,  # Default value
         "timestamp": datetime.now().isoformat()
     }
     
-    # 检查Botasaurus状态
+    # Check Botasaurus status
     try:
         if hasattr(provider, 'solver') and hasattr(provider.solver, 'cached_cookies'):
             status["botasaurus_status"] = "initialized"
@@ -544,7 +553,7 @@ async def get_system_status():
     except:
         status["botasaurus_status"] = "failed"
     
-    # 获取内存使用情况（如果psutil可用）
+    # Get memory usage (if psutil available)
     if HAS_PSUTIL:
         try:
             process = psutil.Process()
@@ -557,7 +566,7 @@ async def get_system_status():
 
 @app.get("/api/system/info")
 async def get_system_info():
-    """获取系统信息"""
+    """Get system information"""
     import sys as sys_module
     
     info = {
@@ -571,17 +580,17 @@ async def get_system_info():
     
     return JSONResponse(content=info)
 
-# ==================== 文件管理 API ====================
+# ==================== File Management API ====================
 
 @app.get("/api/files/list")
 async def list_files(path: str = ""):
-    """列出指定目录下的文件"""
+    """List files in specified directory"""
     base_path = Path.cwd()
     if path:
         target_path = (base_path / path).resolve()
-        # 安全检查：确保路径在项目目录内
+        # Security check: ensure path is within project directory
         if not str(target_path).startswith(str(base_path)):
-            raise HTTPException(403, "禁止访问此路径")
+            raise HTTPException(403, "Access to this path is forbidden")
     else:
         target_path = base_path
     
@@ -598,7 +607,7 @@ async def list_files(path: str = ""):
                     "permissions": oct(entry.stat().st_mode)[-3:]
                 }
                 
-                # 如果是目录，估算大小
+                # If directory, estimate size
                 if entry.is_dir():
                     try:
                         dir_size = get_directory_size(entry.path)
@@ -610,36 +619,36 @@ async def list_files(path: str = ""):
             except (PermissionError, FileNotFoundError):
                 continue
         
-        # 按类型和名称排序
+        # Sort by type and name
         files.sort(key=lambda x: (0 if x["type"] == "directory" else 1, x["name"].lower()))
         
     except (PermissionError, FileNotFoundError) as e:
-        raise HTTPException(404, f"无法访问目录: {str(e)}")
+        raise HTTPException(404, f"Cannot access directory: {str(e)}")
     
     return JSONResponse(content={"files": files, "current_path": str(target_path.relative_to(base_path))})
 
 @app.get("/api/files/storage")
 async def get_storage_info():
-    """获取存储空间信息"""
+    """Get storage space information"""
     base_path = Path.cwd()
     
-    # 计算各种目录大小
+    # Calculate various directory sizes
     project_dir_size = get_directory_size(str(base_path))
     
-    # 账号数据目录（如果存在）
+    # Account data directory (if exists)
     account_data_path = base_path / "data"
     account_data_size = get_directory_size(str(account_data_path)) if account_data_path.exists() else 0
     
-    # 日志目录
+    # Log directory
     log_files_path = base_path / "error_logs"
     log_files_size = get_directory_size(str(log_files_path)) if log_files_path.exists() else 0
     
-    # 缓存目录（输出目录）
+    # Cache directory (output directory)
     cache_files_path = base_path / "output"
     cache_files_size = get_directory_size(str(cache_files_path)) if cache_files_path.exists() else 0
     
-    # 计算总磁盘使用率（如果psutil可用）
-    storage_usage = 25  # 默认值
+    # Calculate total disk usage (if psutil available)
+    storage_usage = 25  # Default value
     if HAS_PSUTIL:
         try:
             disk_usage = psutil.disk_usage(str(base_path))
@@ -663,7 +672,7 @@ async def get_storage_info():
 
 @app.post("/api/files/clean-cache")
 async def clean_cache():
-    """清理缓存文件"""
+    """Clean cache files"""
     base_path = Path.cwd()
     cache_dirs = ["output", "__pycache__", ".pytest_cache"]
     deleted_count = 0
@@ -678,11 +687,11 @@ async def clean_cache():
                     shutil.rmtree(cache_path)
                     deleted_count += 1
                     total_freed += dir_size
-                    logger.info(f"已删除缓存目录: {cache_dir}")
+                    logger.info(f"Deleted cache directory: {cache_dir}")
             except Exception as e:
-                logger.error(f"删除缓存目录 {cache_dir} 失败: {e}")
+                logger.error(f"Failed to delete cache directory {cache_dir}: {e}")
     
-    # 删除单个缓存文件
+    # Delete individual cache files
     cache_patterns = ["*.pyc", "*.log", "*.tmp"]
     for pattern in cache_patterns:
         for file_path in base_path.rglob(pattern):
@@ -697,19 +706,19 @@ async def clean_cache():
     
     return JSONResponse(content={
         "success": True,
-        "message": f"✅ 已清理 {deleted_count} 个缓存项，释放 {format_file_size(total_freed)}",
+        "message": f"✅ Cleaned {deleted_count} cache items, freed {format_file_size(total_freed)}",
         "deleted_count": deleted_count,
         "freed_bytes": total_freed
     })
 
 @app.post("/api/files/delete")
 async def delete_files(request: Request):
-    """删除指定文件/目录"""
+    """Delete specified files/directories"""
     data = await request.json()
     paths = data.get("paths", [])
     
     if not paths:
-        raise HTTPException(400, "未指定要删除的路径")
+        raise HTTPException(400, "No paths specified for deletion")
     
     base_path = Path.cwd()
     deleted = []
@@ -718,9 +727,9 @@ async def delete_files(request: Request):
     for rel_path in paths:
         try:
             target_path = (base_path / rel_path).resolve()
-            # 安全检查
+            # Security check
             if not str(target_path).startswith(str(base_path)):
-                errors.append(f"禁止访问: {rel_path}")
+                errors.append(f"Access forbidden: {rel_path}")
                 continue
             
             if target_path.exists():
@@ -729,28 +738,28 @@ async def delete_files(request: Request):
                 else:
                     target_path.unlink()
                 deleted.append(rel_path)
-                logger.info(f"已删除: {rel_path}")
+                logger.info(f"Deleted: {rel_path}")
             else:
-                errors.append(f"文件不存在: {rel_path}")
+                errors.append(f"File not found: {rel_path}")
         except Exception as e:
-            errors.append(f"删除失败 {rel_path}: {str(e)}")
+            errors.append(f"Delete failed {rel_path}: {str(e)}")
     
     return JSONResponse(content={
         "success": len(errors) == 0,
-        "message": f"已删除 {len(deleted)} 个项，{len(errors)} 个错误",
+        "message": f"Deleted {len(deleted)} items, {len(errors)} errors",
         "deleted": deleted,
         "errors": errors
     })
 
-# ==================== 增强日志 API ====================
+# ==================== Enhanced Log API ====================
 
 @app.get("/api/logs/recent")
 async def get_recent_logs(limit: int = 100):
-    """获取最近日志（支持过滤）"""
+    """Get recent logs (with filtering support)"""
     recent_logs = []
     
-    # 这里可以扩展为从文件或数据库读取日志
-    # 目前使用内存中的日志
+    # This can be extended to read logs from files or database
+    # Currently using in-memory logs
     for log in logs_db[-limit:]:
         recent_logs.append({
             "timestamp": log.get("timestamp", ""),
@@ -764,29 +773,29 @@ async def get_recent_logs(limit: int = 100):
 
 @app.post("/api/accounts/refresh-all")
 async def refresh_all_accounts():
-    """刷新所有账号（模拟）"""
-    # 在实际应用中，这里会调用provider刷新所有账号的Cookie
-    logger.info("开始刷新所有账号...")
+    """Refresh all accounts (simulated)"""
+    # In production, this would call provider to refresh all account Cookies
+    logger.info("Starting to refresh all accounts...")
     
-    # 模拟刷新过程
+    # Simulate refresh process
     import asyncio
     await asyncio.sleep(2)
     
     return JSONResponse(content={
         "success": True,
-        "message": "✅ 已请求刷新所有账号，将在后台执行",
+        "message": "✅ Requested refresh for all accounts, will execute in background",
         "account_count": len(accounts_db)
     })
 
 @app.post("/api/account/refresh/{account_id}")
 async def refresh_account(account_id: str):
-    """刷新指定账号"""
+    """Refresh specified account"""
     if account_id not in accounts_db:
-        raise HTTPException(404, "账号不存在")
+        raise HTTPException(404, "Account not found")
     
-    # 模拟刷新
+    # Simulate refresh
     account = accounts_db[account_id]
-    account["token"] = "刷新Token_" + str(uuid.uuid4())[:8]
+    account["token"] = "RefreshToken_" + str(uuid.uuid4())[:8]
     account["expires_at"] = (datetime.now() + timedelta(days=30)).isoformat()
     account["total_calls"] = account.get("total_calls", 0) + 1
     
@@ -794,32 +803,32 @@ async def refresh_account(account_id: str):
         "timestamp": datetime.now().isoformat(),
         "account_name": account["name"],
         "level": "info",
-        "note": "账号Token已刷新",
+        "note": "Account Token refreshed",
         "status": "SUCCESS"
     })
     
     return JSONResponse(content={
         "success": True,
-        "message": "✅ 账号刷新成功",
+        "message": "✅ Account refresh successful",
         "account_id": account_id
     })
 
 @app.post("/api/cookie/parse")
 async def parse_cookie_string(request: Request):
-    """解析 Cookie 字符串并创建账号"""
+    """Parse Cookie string and create account"""
     try:
         data = await request.json()
         text = data.get("text", "")
-        account_name = data.get("account_name", "导入的账号")
+        account_name = data.get("account_name", "Imported Account")
         
         if not text:
-            raise HTTPException(400, "请输入要解析的文本内容")
+            raise HTTPException(400, "Please enter text content to parse")
         
-        # 调用 BrowserService 解析 Cookie
+        # Call BrowserService to parse Cookie
         result = provider.solver.parse_cookie_string(text, account_name)
         
         if result.get("success"):
-            # 创建账号记录
+            # Create account record
             account_id = str(uuid.uuid4())[:8]
             account_dir = result.get("account_dir", f"data/cookies/{account_name}")
             
@@ -829,7 +838,7 @@ async def parse_cookie_string(request: Request):
                 "is_active": True,
                 "token_source": "cookie_import",
                 "data_dir": account_dir,
-                "token": "Cookie导入（已保存至本地）",
+                "token": "Cookie Import (saved locally)",
                 "expires_at": (datetime.now() + timedelta(days=30)).isoformat(),
                 "total_calls": 0,
                 "discord_username": None,
@@ -844,20 +853,20 @@ async def parse_cookie_string(request: Request):
             }
             accounts_db[account_id] = new_account
             
-            # 添加日志
+            # Add log
             logs_db.append({
                 "timestamp": datetime.now().isoformat(),
                 "account_name": account_name,
                 "model": "N/A",
                 "duration": 0,
                 "status": "SUCCESS",
-                "note": f"Cookie导入成功，数据保存到: {account_dir}",
+                "note": f"Cookie import successful, data saved to: {account_dir}",
                 "level": "info"
             })
             
             return JSONResponse(content={
                 "success": True,
-                "message": f"✅ Cookie 导入成功！提取到 {result.get('cookie_count', 0)} 个 Cookie 并保存到本地目录。",
+                "message": f"✅ Cookie import successful! Extracted {result.get('cookie_count', 0)} Cookies and saved to local directory.",
                 "account_id": account_id,
                 "cookie_count": result.get("cookie_count", 0),
                 "user_agent_preview": result.get("user_agent", "")[:50],
@@ -866,23 +875,23 @@ async def parse_cookie_string(request: Request):
         else:
             return JSONResponse(content={
                 "success": False,
-                "message": f"❌ 解析失败: {result.get('error', '未知错误')}"
+                "message": f"❌ Parse failed: {result.get('error', 'Unknown error')}"
             })
             
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Cookie 解析过程异常: {e}")
+        logger.error(f"❌ Cookie parse exception: {e}")
         return JSONResponse(content={
             "success": False,
-            "message": f"❌ 解析过程异常: {str(e)}"
+            "message": f"❌ Parse exception: {str(e)}"
         })
 
-# ==================== API Key 管理 ====================
+# ==================== API Key Management ====================
 
 @app.get("/api/settings/api-key")
 async def get_api_key():
-    """获取当前 API Key"""
+    """Get current API Key"""
     return JSONResponse(content={
         "api_key": settings.API_MASTER_KEY,
         "masked": "***" + settings.API_MASTER_KEY[-4:] if len(settings.API_MASTER_KEY) > 4 else "***"
@@ -890,18 +899,18 @@ async def get_api_key():
 
 @app.post("/api/settings/api-key")
 async def update_api_key(request: Request):
-    """更新 API Key（写入 .env 文件）"""
+    """Update API Key (write to .env file)"""
     try:
         data = await request.json()
         new_key = data.get("api_key", "").strip()
         
         if not new_key:
-            raise HTTPException(400, "API Key 不能为空")
+            raise HTTPException(400, "API Key cannot be empty")
         
-        # 更新 .env 文件
+        # Update .env file
         env_path = ".env"
         if not os.path.exists(env_path):
-            raise HTTPException(500, "找不到 .env 文件")
+            raise HTTPException(500, "Cannot find .env file")
         
         with open(env_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
@@ -921,28 +930,28 @@ async def update_api_key(request: Request):
         with open(env_path, 'w', encoding='utf-8') as f:
             f.writelines(new_lines)
         
-        # 更新内存中的配置（可选，需要重启服务才能完全生效）
+        # Update in-memory settings (optional, full effect may require restart)
         # settings.API_MASTER_KEY = new_key
         
-        logger.info(f"API Key 已更新")
+        logger.info("API Key updated")
         
         return JSONResponse(content={
             "success": True,
-            "message": "✅ API Key 已更新。请注意，部分功能可能需要重启服务才能生效。",
+            "message": "✅ API Key updated. Note: some features may require a service restart to take effect.",
             "masked": "***" + new_key[-4:] if len(new_key) > 4 else "***"
         })
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"更新 API Key 失败: {e}")
-        raise HTTPException(500, f"更新失败: {str(e)}")
+        logger.error(f"Failed to update API Key: {e}")
+        raise HTTPException(500, f"Update failed: {str(e)}")
 
 @app.get("/api/settings/export-config")
 async def export_config():
-    """导出当前系统配置（JSON格式）"""
+    """Export current system configuration (JSON format)"""
     try:
-        # 收集配置信息
+        # Collect configuration information
         config = {
             "export_time": datetime.now().isoformat(),
             "version": "3.0",
@@ -974,38 +983,38 @@ async def export_config():
         
         return JSONResponse(content={
             "success": True,
-            "message": "✅ 配置导出成功",
+            "message": "✅ Configuration exported successfully",
             "config": config,
             "download_filename": f"perplexity-config-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
         })
         
     except Exception as e:
-        logger.error(f"导出配置失败: {e}")
-        raise HTTPException(500, f"导出配置失败: {str(e)}")
+        logger.error(f"Failed to export configuration: {e}")
+        raise HTTPException(500, f"Failed to export configuration: {str(e)}")
 
 
-# ==================== 账号详细信息 API ====================
+# ==================== Account Detail API ====================
 
 @app.get("/api/account/details/{account_name}")
 async def get_account_details(account_name: str):
-    """获取账号详细信息（包括完整路径、创建时间、更新时间、调用统计等）"""
+    """Get detailed account information (paths, creation time, update time, call stats, etc.)"""
     try:
-        # 检查会话文件是否存在
+        # Check if session file exists
         session_file = f"data/sessions/{account_name}.json"
         if not os.path.exists(session_file):
-            raise HTTPException(404, f"账号 '{account_name}' 不存在或会话文件未找到")
+            raise HTTPException(404, f"Account '{account_name}' does not exist or session file not found")
         
         with open(session_file, 'r', encoding='utf-8') as f:
             session_data = json.load(f)
         
-        # 检查Cookie文件是否存在
+        # Check if Cookie file exists
         cookie_file = session_data.get("cookie_file")
         cookie_data = None
         if cookie_file and os.path.exists(cookie_file):
             with open(cookie_file, 'r', encoding='utf-8') as f:
                 cookie_data = json.load(f)
         
-        # 构建响应
+        # Build response
         response = {
             "account_name": account_name,
             "session_data": session_data,
@@ -1021,33 +1030,33 @@ async def get_account_details(account_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"获取账号详情失败: {e}")
-        raise HTTPException(500, f"获取账号详情失败: {str(e)}")
+        logger.error(f"Failed to get account details: {e}")
+        raise HTTPException(500, f"Failed to get account details: {str(e)}")
 
 @app.post("/api/account/verify/{account_name}")
 async def verify_account_cookie(account_name: str):
-    """手动验证 Cookie 有效性（打开浏览器检查）"""
+    """Manually verify Cookie validity (open browser to check)"""
     try:
-        # 检查 provider 是否就绪
+        # Check if provider is ready
         if not hasattr(provider, 'solver'):
-            raise HTTPException(503, "服务未就绪")
+            raise HTTPException(503, "Service not ready")
         
-        # 调用 BrowserService 验证 Cookie
+        # Call BrowserService to verify Cookie
         result = await provider.solver.verify_cookie(account_name, headless=False)
         
         if result.get("success"):
-            # 添加日志
+            # Add log
             logs_db.append({
                 "timestamp": datetime.now().isoformat(),
                 "account_name": account_name,
                 "level": "info",
-                "note": f"Cookie 验证成功: {result.get('message', '')}",
+                "note": f"Cookie verification succeeded: {result.get('message', '')}",
                 "status": "SUCCESS"
             })
             
             return JSONResponse(content={
                 "success": True,
-                "message": result.get("message", "✅ Cookie 验证成功"),
+                "message": result.get("message", "✅ Cookie verification succeeded"),
                 "account_name": account_name,
                 "valid": result.get("valid", False),
                 "cookie_count": result.get("cookie_count", 0),
@@ -1055,18 +1064,18 @@ async def verify_account_cookie(account_name: str):
                 "details": result
             })
         else:
-            # 添加日志
+            # Add log
             logs_db.append({
                 "timestamp": datetime.now().isoformat(),
                 "account_name": account_name,
                 "level": "warning",
-                "note": f"Cookie 验证失败: {result.get('error', '')}",
+                "note": f"Cookie verification failed: {result.get('error', '')}",
                 "status": "FAILED"
             })
             
             return JSONResponse(content={
                 "success": False,
-                "message": result.get("error", "❌ Cookie 验证失败"),
+                "message": result.get("error", "❌ Cookie verification failed"),
                 "account_name": account_name,
                 "valid": False,
                 "details": result
@@ -1075,19 +1084,19 @@ async def verify_account_cookie(account_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"验证 Cookie 失败: {e}")
-        raise HTTPException(500, f"验证失败: {str(e)}")
+        logger.error(f"Cookie verification failed: {e}")
+        raise HTTPException(500, f"Verification failed: {str(e)}")
 
-# ==================== 账号统计和维护 API ====================
+# ==================== Account Statistics and Maintenance API ====================
 
 @app.get("/api/account/stats/{account_name}")
 async def get_account_stats(account_name: str):
-    """获取账号调用统计"""
+    """Get account call statistics"""
     try:
-        # 检查会话文件
+        # Check session file
         session_file = f"data/sessions/{account_name}.json"
         if not os.path.exists(session_file):
-            raise HTTPException(404, f"账号 '{account_name}' 不存在")
+            raise HTTPException(404, f"Account '{account_name}' does not exist")
         
         with open(session_file, 'r', encoding='utf-8') as f:
             session_data = json.load(f)
@@ -1114,54 +1123,54 @@ async def get_account_stats(account_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"获取账号统计失败: {e}")
-        raise HTTPException(500, f"获取统计失败: {str(e)}")
+        logger.error(f"Failed to get account statistics: {e}")
+        raise HTTPException(500, f"Failed to get statistics: {str(e)}")
 
 @app.post("/api/account/maintenance/{account_name}")
 async def trigger_account_maintenance(account_name: str):
-    """触发账号自动维护（强制刷新Cookie）"""
+    """Trigger automatic account maintenance (force refresh Cookie)"""
     try:
-        # 检查 provider 是否就绪
+        # Check if provider is ready
         if not hasattr(provider, 'solver'):
-            raise HTTPException(503, "服务未就绪")
+            raise HTTPException(503, "Service not ready")
         
-        # 这里可以调用 browser_service 的自动维护方法
-        # 暂时模拟维护过程
-        logger.info(f"🔄 开始手动维护账号: {account_name}")
+        # Here we could call browser_service.perform_auto_maintenance
+        # For now, simulate maintenance process
+        logger.info(f"🔄 Starting manual maintenance for account: {account_name}")
         
-        # 模拟维护延迟
+        # Simulate maintenance delay
         import asyncio
         await asyncio.sleep(2)
         
-        # 添加日志
+        # Add log
         logs_db.append({
             "timestamp": datetime.now().isoformat(),
             "account_name": account_name,
             "level": "info",
-            "note": f"手动维护触发成功，将在后台执行Cookie刷新",
+            "note": "Manual maintenance triggered successfully, Cookie refresh will run in background",
             "status": "MAINTENANCE_TRIGGERED"
         })
         
         return JSONResponse(content={
             "success": True,
-            "message": "✅ 账号维护已触发，将在后台自动刷新Cookie",
+            "message": "✅ Account maintenance triggered, Cookie will be refreshed in the background",
             "account_name": account_name,
             "maintenance_time": datetime.now().isoformat(),
-            "note": "实际维护功能需要 browser_service 实现 perform_auto_maintenance 方法"
+            "note": "Actual maintenance requires browser_service to implement perform_auto_maintenance"
         })
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"触发维护失败: {e}")
-        raise HTTPException(500, f"维护触发失败: {str(e)}")
+        logger.error(f"Failed to trigger maintenance: {e}")
+        raise HTTPException(500, f"Failed to trigger maintenance: {str(e)}")
 
-# ==================== 模型管理 API ====================
+# ==================== Model Management API ====================
 
 @app.get("/api/models")
 async def get_models_list():
-    """获取模型列表（包括自定义模型）"""
-    # 获取预设模型（从provider的get_models中获取）
+    """Get model list (including custom models)"""
+    # Get preset models (from provider.get_models)
     preset_models_response = await provider.get_models()
     preset_models = preset_models_response.body if hasattr(preset_models_response, 'body') else preset_models_response
     
@@ -1203,7 +1212,7 @@ async def get_models_list():
 
 @app.post("/api/models")
 async def add_model(request: Request):
-    """添加新模型"""
+    """Add a new model"""
     try:
         data = await request.json()
         model_id = data.get("id", "").strip()
@@ -1211,17 +1220,17 @@ async def add_model(request: Request):
         provider_name = data.get("provider", "custom").strip()
         
         if not model_id:
-            raise HTTPException(400, "模型ID不能为空")
+            raise HTTPException(400, "Model ID cannot be empty")
         
         if not model_name:
             model_name = model_id
         
-        # 检查是否已存在
+        # Check if already exists
         for model in custom_models:
             if model.get("id") == model_id:
-                raise HTTPException(400, f"模型ID '{model_id}' 已存在")
+                raise HTTPException(400, f"Model ID '{model_id}' already exists")
         
-        # 添加新模型
+        # Add new model
         new_model = {
             "id": model_id,
             "name": model_name,
@@ -1233,36 +1242,36 @@ async def add_model(request: Request):
         
         custom_models.append(new_model)
         
-        # 添加日志
+        # Add log
         logs_db.append({
             "timestamp": datetime.now().isoformat(),
             "level": "info",
-            "note": f"添加自定义模型: {model_name} ({model_id})"
+            "note": f"Added custom model: {model_name} ({model_id})"
         })
         
         return JSONResponse(content={
             "success": True,
-            "message": f"✅ 模型 '{model_name}' 添加成功",
+            "message": f"✅ Model '{model_name}' added successfully",
             "model": new_model
         })
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"添加模型失败: {e}")
-        raise HTTPException(500, f"添加模型失败: {str(e)}")
+        logger.error(f"Failed to add model: {e}")
+        raise HTTPException(500, f"Failed to add model: {str(e)}")
 
 @app.put("/api/models/{model_id}")
 async def update_model(model_id: str, request: Request):
-    """重命名/更新模型"""
+    """Rename/update a model"""
     try:
         data = await request.json()
         new_name = data.get("name", "").strip()
         
         if not new_name:
-            raise HTTPException(400, "新名称不能为空")
+            raise HTTPException(400, "New name cannot be empty")
         
-        # 查找模型（在自定义模型中查找）
+        # Find model (only in custom models)
         model_index = -1
         for i, model in enumerate(custom_models):
             if model.get("id") == model_id:
@@ -1270,37 +1279,37 @@ async def update_model(model_id: str, request: Request):
                 break
         
         if model_index == -1:
-            raise HTTPException(404, f"未找到模型 '{model_id}' 或无法修改预设模型")
+            raise HTTPException(404, f"Model '{model_id}' not found or preset models cannot be modified")
         
-        # 更新模型
+        # Update model
         old_name = custom_models[model_index].get("name", model_id)
         custom_models[model_index]["name"] = new_name
         custom_models[model_index]["updated_at"] = datetime.now().isoformat()
         
-        # 添加日志
+        # Add log
         logs_db.append({
             "timestamp": datetime.now().isoformat(),
             "level": "info",
-            "note": f"重命名模型: {old_name} -> {new_name} ({model_id})"
+            "note": f"Renamed model: {old_name} -> {new_name} ({model_id})"
         })
         
         return JSONResponse(content={
             "success": True,
-            "message": f"✅ 模型重命名成功: {old_name} -> {new_name}",
+            "message": f"✅ Model renamed successfully: {old_name} -> {new_name}",
             "model": custom_models[model_index]
         })
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"更新模型失败: {e}")
-        raise HTTPException(500, f"更新模型失败: {str(e)}")
+        logger.error(f"Failed to update model: {e}")
+        raise HTTPException(500, f"Failed to update model: {str(e)}")
 
 @app.delete("/api/models/{model_id}")
 async def delete_model(model_id: str):
-    """删除模型（仅限自定义模型）"""
+    """Delete a model (custom models only)"""
     try:
-        # 查找模型（在自定义模型中查找）
+        # Find model (only in custom models)
         model_index = -1
         deleted_model = None
         
@@ -1311,35 +1320,35 @@ async def delete_model(model_id: str):
                 break
         
         if model_index == -1:
-            raise HTTPException(404, f"未找到模型 '{model_id}' 或无法删除预设模型")
+            raise HTTPException(404, f"Model '{model_id}' not found or preset models cannot be deleted")
         
-        # 删除模型
+        # Delete model
         deleted = custom_models.pop(model_index)
         
-        # 添加日志
+        # Add log
         logs_db.append({
             "timestamp": datetime.now().isoformat(),
             "level": "info",
-            "note": f"删除模型: {deleted.get('name', model_id)} ({model_id})"
+            "note": f"Deleted model: {deleted.get('name', model_id)} ({model_id})"
         })
         
         return JSONResponse(content={
             "success": True,
-            "message": f"✅ 模型 '{deleted.get('name', model_id)}' 删除成功",
+            "message": f"✅ Model '{deleted.get('name', model_id)}' deleted successfully",
             "model_id": model_id
         })
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"删除模型失败: {e}")
-        raise HTTPException(500, f"删除模型失败: {str(e)}")
+        logger.error(f"Failed to delete model: {e}")
+        raise HTTPException(500, f"Failed to delete model: {str(e)}")
 
-# ==================== 文件夹管理 API ====================
+# ==================== Folder Management API ====================
 
 @app.get("/api/folders/error_logs")
 async def get_error_logs():
-    """获取error_logs文件夹内容"""
+    """Get contents of error_logs folder"""
     try:
         error_logs_path = Path("error_logs")
         if not error_logs_path.exists():
@@ -1349,13 +1358,13 @@ async def get_error_logs():
                 "exists": False,
                 "files": [],
                 "total_size": 0,
-                "message": "error_logs文件夹不存在"
+                "message": "error_logs folder does not exist"
             })
         
         files = []
         total_size = 0
         
-        # 遍历error_logs文件夹
+        # Traverse error_logs folder
         for entry in os.scandir(error_logs_path):
             try:
                 file_info = {
@@ -1372,7 +1381,7 @@ async def get_error_logs():
             except (PermissionError, FileNotFoundError):
                 continue
         
-        # 按修改时间排序（最新的在前）
+        # Sort by modified time (newest first)
         files.sort(key=lambda x: x["modified"], reverse=True)
         
         return JSONResponse(content={
@@ -1382,16 +1391,16 @@ async def get_error_logs():
             "files": files,
             "total_size": total_size,
             "file_count": len(files),
-            "message": f"找到 {len(files)} 个文件/目录，总大小: {format_file_size(total_size)}"
+            "message": f"Found {len(files)} files/directories, total size: {format_file_size(total_size)}"
         })
         
     except Exception as e:
-        logger.error(f"获取error_logs失败: {e}")
-        raise HTTPException(500, f"获取error_logs失败: {str(e)}")
+        logger.error(f"Failed to get error_logs: {e}")
+        raise HTTPException(500, f"Failed to get error_logs: {str(e)}")
 
 @app.get("/api/folders/output")
 async def get_output_folder():
-    """获取output文件夹内容"""
+    """Get contents of output folder"""
     try:
         output_path = Path("output")
         if not output_path.exists():
@@ -1401,13 +1410,13 @@ async def get_output_folder():
                 "exists": False,
                 "files": [],
                 "total_size": 0,
-                "message": "output文件夹不存在"
+                "message": "output folder does not exist"
             })
         
         files = []
         total_size = 0
         
-        # 遍历output文件夹
+        # Traverse output folder
         for entry in os.scandir(output_path):
             try:
                 file_info = {
@@ -1424,7 +1433,7 @@ async def get_output_folder():
             except (PermissionError, FileNotFoundError):
                 continue
         
-        # 按修改时间排序（最新的在前）
+        # Sort by modified time (newest first)
         files.sort(key=lambda x: x["modified"], reverse=True)
         
         return JSONResponse(content={
@@ -1434,102 +1443,102 @@ async def get_output_folder():
             "files": files,
             "total_size": total_size,
             "file_count": len(files),
-            "message": f"找到 {len(files)} 个文件/目录，总大小: {format_file_size(total_size)}"
+            "message": f"Found {len(files)} files/directories, total size: {format_file_size(total_size)}"
         })
         
     except Exception as e:
-        logger.error(f"获取output文件夹失败: {e}")
-        raise HTTPException(500, f"获取output文件夹失败: {str(e)}")
+        logger.error(f"Failed to get output folder: {e}")
+        raise HTTPException(500, f"Failed to get output folder: {str(e)}")
 
 @app.delete("/api/folders/error_logs/{filename}")
 async def delete_error_log_file(filename: str):
-    """删除error_logs中的文件或目录"""
+    """Delete a file or directory in error_logs"""
     try:
-        # 安全检查：防止路径遍历攻击
+        # Security check: prevent path traversal
         if ".." in filename or "/" in filename or "\\" in filename:
-            raise HTTPException(400, "无效的文件名")
+            raise HTTPException(400, "Invalid filename")
         
         target_path = Path("error_logs") / filename
         if not target_path.exists():
-            raise HTTPException(404, f"文件不存在: {filename}")
+            raise HTTPException(404, f"File does not exist: {filename}")
         
-        # 安全检查：确保路径在error_logs目录内
+        # Security check: ensure path is within error_logs directory
         if not str(target_path.resolve()).startswith(str(Path.cwd().resolve() / "error_logs")):
-            raise HTTPException(403, "禁止访问此路径")
+            raise HTTPException(403, "Access to this path is forbidden")
         
-        # 删除文件或目录
+        # Delete file or directory
         if target_path.is_dir():
             shutil.rmtree(target_path)
-            action = "目录"
+            action = "directory"
         else:
             target_path.unlink()
-            action = "文件"
+            action = "file"
         
-        # 添加日志
+        # Add log
         logs_db.append({
             "timestamp": datetime.now().isoformat(),
             "level": "info",
-            "note": f"删除error_logs {action}: {filename}",
+            "note": f"Deleted error_logs {action}: {filename}",
             "status": "FILE_DELETED"
         })
         
-        logger.info(f"✅ 删除error_logs {action}: {filename}")
+        logger.info(f"✅ Deleted error_logs {action}: {filename}")
         
         return JSONResponse(content={
             "success": True,
-            "message": f"✅ 已删除 {action}: {filename}"
+            "message": f"✅ Deleted {action}: {filename}"
         })
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"删除error_logs文件失败: {e}")
-        raise HTTPException(500, f"删除失败: {str(e)}")
+        logger.error(f"Failed to delete error_logs file: {e}")
+        raise HTTPException(500, f"Delete failed: {str(e)}")
 
 @app.delete("/api/folders/output/{filename}")
 async def delete_output_file(filename: str):
-    """删除output中的文件或目录"""
+    """Delete a file or directory in output"""
     try:
-        # 安全检查：防止路径遍历攻击
+        # Security check: prevent path traversal
         if ".." in filename or "/" in filename or "\\" in filename:
-            raise HTTPException(400, "无效的文件名")
+            raise HTTPException(400, "Invalid filename")
         
         target_path = Path("output") / filename
         if not target_path.exists():
-            raise HTTPException(404, f"文件不存在: {filename}")
+            raise HTTPException(404, f"File does not exist: {filename}")
         
-        # 安全检查：确保路径在output目录内
+        # Security check: ensure path is within output directory
         if not str(target_path.resolve()).startswith(str(Path.cwd().resolve() / "output")):
-            raise HTTPException(403, "禁止访问此路径")
+            raise HTTPException(403, "Access to this path is forbidden")
         
-        # 删除文件或目录
+        # Delete file or directory
         if target_path.is_dir():
             shutil.rmtree(target_path)
-            action = "目录"
+            action = "directory"
         else:
             target_path.unlink()
-            action = "文件"
+            action = "file"
         
-        # 添加日志
+        # Add log
         logs_db.append({
             "timestamp": datetime.now().isoformat(),
             "level": "info",
-            "note": f"删除output {action}: {filename}",
+            "note": f"Deleted output {action}: {filename}",
             "status": "FILE_DELETED"
         })
         
-        logger.info(f"✅ 删除output {action}: {filename}")
+        logger.info(f"✅ Deleted output {action}: {filename}")
         
         return JSONResponse(content={
             "success": True,
-            "message": f"✅ 已删除 {action}: {filename}"
+            "message": f"✅ Deleted {action}: {filename}"
         })
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"删除output文件失败: {e}")
-        raise HTTPException(500, f"删除失败: {str(e)}")
+        logger.error(f"Failed to delete output file: {e}")
+        raise HTTPException(500, f"Delete failed: {str(e)}")
 
 # ==================== 实时日志 SSE 端点（可选）====================
 # 如果需要真正的实时日志，可以实现SSE端点

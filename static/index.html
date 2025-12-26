@@ -7,21 +7,425 @@
     <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; }
-        .card { border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-radius: 10px; }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
-        .active { background-color: #28a745; }
-        .inactive { background-color: #dc3545; }
-        .api-box { background: #2d3436; color: #fff; padding: 10px; border-radius: 5px; font-family: monospace; }
-        .log-container { max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
-        .log-line { padding: 2px 5px; border-bottom: 1px solid #eee; }
-        .log-line.info { color: #0d6efd; }
-        .log-line.success { color: #198754; }
-        .log-line.warning { color: #ffc107; }
-        .log-line.error { color: #dc3545; }
-        .log-line.debug { color: #6c757d; }
+        :root {
+            /* Perplexity-inspired teal/cyan color scheme */
+            --primary-color: #20B2AA;
+            --primary-dark: #008B8B;
+            --primary-light: #40E0D0;
+            --accent-color: #FF6B35;
+            --accent-secondary: #F7931E;
+            --dark-bg: #1a1d21;
+            --darker-bg: #0d1117;
+            --card-bg: #ffffff;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --border-color: #e2e8f0;
+            
+            /* Gradients */
+            --primary-gradient: linear-gradient(135deg, #20B2AA 0%, #008B8B 100%);
+            --header-gradient: linear-gradient(135deg, #1a1d21 0%, #2d3748 50%, #20B2AA 100%);
+            --success-gradient: linear-gradient(135deg, #10B981 0%, #059669 100%);
+            --warning-gradient: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+            --danger-gradient: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+            --info-gradient: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+        }
+        
+        body {
+            background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
+            border-radius: 16px;
+            background: var(--card-bg);
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 8px 24px rgba(32,178,170,0.15);
+        }
+        
+        .navbar {
+            background: var(--header-gradient) !important;
+            border-radius: 16px !important;
+            padding: 12px 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .navbar-brand {
+            color: white !important;
+            font-weight: 700;
+            font-size: 1.25rem;
+            letter-spacing: -0.5px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.95); }
+        }
+        
+        .active { background-color: #10B981; }
+        .inactive { background-color: #EF4444; }
+        
+        .api-box {
+            background: linear-gradient(135deg, var(--dark-bg) 0%, var(--darker-bg) 100%);
+            color: #e2e8f0;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', monospace;
+            font-size: 13px;
+            border-left: 4px solid var(--primary-color);
+            transition: border-color 0.2s ease;
+        }
+        
+        .api-box:hover {
+            border-left-color: var(--accent-color);
+        }
+        
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', monospace;
+            font-size: 12px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary-color) var(--dark-bg);
+            background: var(--darker-bg);
+            border-radius: 10px;
+        }
+        
+        .log-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .log-container::-webkit-scrollbar-track {
+            background: var(--dark-bg);
+            border-radius: 4px;
+        }
+        
+        .log-container::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 4px;
+        }
+        
+        .log-container::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-light);
+        }
+        
+        .log-line {
+            padding: 6px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: background-color 0.15s ease;
+        }
+        
+        .log-line:hover {
+            background-color: rgba(32,178,170,0.1);
+        }
+        
+        .log-line.info { color: #60A5FA; }
+        .log-line.success { color: #34D399; }
+        .log-line.warning { color: #FBBF24; }
+        .log-line.error { color: #F87171; }
+        .log-line.debug { color: #9CA3AF; }
 
-        .progress-bar-custom { height: 8px; }
+        .progress-bar-custom {
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            background: #e2e8f0;
+        }
+        
+        .progress-bar-custom .progress-bar {
+            background: var(--primary-gradient);
+        }
+        
+        .btn {
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            padding: 8px 16px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #008B8B 0%, #006666 100%);
+        }
+        
+        .btn-success {
+            background: var(--success-gradient);
+            border: none;
+            color: white;
+        }
+        
+        .btn-outline-success {
+            border: 2px solid #10B981;
+            color: #10B981;
+        }
+        
+        .btn-outline-success:hover {
+            background: var(--success-gradient);
+            border-color: transparent;
+            color: white;
+        }
+        
+        .btn-outline-warning {
+            border: 2px solid #F59E0B;
+            color: #F59E0B;
+        }
+        
+        .btn-outline-warning:hover {
+            background: var(--warning-gradient);
+            border-color: transparent;
+            color: white;
+        }
+        
+        .btn-outline-info {
+            border: 2px solid var(--primary-color);
+            color: var(--primary-color);
+        }
+        
+        .btn-outline-info:hover {
+            background: var(--primary-gradient);
+            border-color: transparent;
+            color: white;
+        }
+        
+        .btn-outline-danger {
+            border: 2px solid #EF4444;
+            color: #EF4444;
+        }
+        
+        .btn-outline-danger:hover {
+            background: var(--danger-gradient);
+            border-color: transparent;
+            color: white;
+        }
+        
+        .badge {
+            border-radius: 8px;
+            font-weight: 600;
+            padding: 5px 10px;
+        }
+        
+        .badge.bg-success {
+            background: var(--success-gradient) !important;
+        }
+        
+        .badge.bg-warning {
+            background: var(--warning-gradient) !important;
+            color: white !important;
+        }
+        
+        .badge.bg-danger {
+            background: var(--danger-gradient) !important;
+        }
+        
+        .badge.bg-info {
+            background: var(--primary-gradient) !important;
+        }
+        
+        .badge.bg-secondary {
+            background: linear-gradient(135deg, #64748B 0%, #475569 100%) !important;
+        }
+        
+        .form-control {
+            border-radius: 10px;
+            border: 2px solid var(--border-color);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            padding: 10px 14px;
+        }
+        
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 4px rgba(32,178,170,0.15);
+        }
+        
+        .table {
+            font-size: 13px;
+        }
+        
+        .table th {
+            font-weight: 700;
+            color: var(--text-primary);
+            border-bottom: 2px solid var(--primary-color);
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        
+        .alert {
+            border-radius: 12px;
+            border: none;
+        }
+        
+        .alert-info {
+            background: linear-gradient(135deg, rgba(32,178,170,0.1) 0%, rgba(0,139,139,0.1) 100%);
+            border-left: 4px solid var(--primary-color);
+            color: var(--text-primary);
+        }
+        
+        .alert-warning {
+            background: linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(217,119,6,0.1) 100%);
+            border-left: 4px solid #F59E0B;
+            color: var(--text-primary);
+        }
+        
+        .card-title {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        
+        /* Custom scrollbar for tables */
+        .table-responsive::-webkit-scrollbar {
+            height: 6px;
+        }
+        
+        .table-responsive::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
+        }
+        
+        .table-responsive::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 3px;
+        }
+        
+        /* Animation for loading states */
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        /* Toast container styling */
+        #toast-container .alert {
+            backdrop-filter: blur(12px);
+            background: rgba(255,255,255,0.95);
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        #toast-container .alert-success {
+            border-left-color: #10B981;
+        }
+        
+        #toast-container .alert-danger {
+            border-left-color: #EF4444;
+        }
+        
+        /* Footer styling */
+        footer {
+            background: rgba(255,255,255,0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 16px 20px;
+            border: 1px solid rgba(32,178,170,0.1);
+        }
+        
+        /* Card section headers */
+        .card h6.card-title {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+        }
+        
+        .card h6.card-title i {
+            color: var(--primary-color);
+        }
+        
+        /* Welcome card special styling */
+        .border-primary {
+            border: 2px solid var(--primary-color) !important;
+            background: linear-gradient(135deg, rgba(32,178,170,0.02) 0%, rgba(255,255,255,1) 100%);
+        }
+        
+        .border-success {
+            border: 2px solid #10B981 !important;
+        }
+        
+        .text-primary {
+            color: var(--primary-color) !important;
+        }
+        
+        .text-success {
+            color: #10B981 !important;
+        }
+        
+        /* Code styling */
+        code {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            padding: 2px 8px;
+            border-radius: 6px;
+            color: var(--primary-dark);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85em;
+        }
+        
+        /* Conversation progress bars */
+        .progress {
+            background: #e2e8f0;
+            border-radius: 4px;
+        }
+        
+        .progress-bar.bg-success {
+            background: var(--success-gradient) !important;
+        }
+        
+        .progress-bar.bg-warning {
+            background: var(--warning-gradient) !important;
+        }
+        
+        .progress-bar.bg-danger {
+            background: var(--danger-gradient) !important;
+        }
+        
+        /* Spinner customization */
+        .spinner-border.text-primary {
+            color: var(--primary-color) !important;
+        }
+        
+        /* Link styling */
+        a {
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        
+        a:hover {
+            color: var(--primary-dark);
+            text-decoration: underline;
+        }
     </style>
     <script>
         // Fix non-passive event listener warning (improves page responsiveness)
@@ -47,16 +451,16 @@
 <body>
     <div class="container-fluid py-3">
         <!-- Top Navigation -->
-        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm mb-4 rounded">
+        <nav class="navbar navbar-expand-lg navbar-dark shadow-sm mb-4 rounded">
             <div class="container-fluid">
-                <a class="navbar-brand fw-bold text-primary" href="#">
-                    <i class="fas fa-robot me-2"></i>⚡ Perplexity-2API Console
+                <a class="navbar-brand fw-bold" href="#">
+                    <i class="fas fa-bolt me-2" style="color: #40E0D0;"></i>Perplexity-2API Console
                 </a>
-                <div class="d-flex">
-                    <span class="badge bg-dark me-2">v3.0</span>
-                    <div class="d-flex align-items-center">
+                <div class="d-flex align-items-center">
+                    <span class="badge me-2" style="background: rgba(255,255,255,0.15); color: #40E0D0; border: 1px solid rgba(64,224,208,0.3);">v3.0</span>
+                    <div class="d-flex align-items-center text-white">
                         <span class="me-2" id="systemStatus">🟢 System Running</span>
-                        <div class="spinner-border spinner-border-sm text-primary d-none" id="loadingSpinner"></div>
+                        <div class="spinner-border spinner-border-sm text-light d-none" id="loadingSpinner"></div>
                     </div>
                 </div>
             </div>
@@ -186,7 +590,7 @@
                 </div>
 
                 <!-- Main Cookie Input -->
-                <div class="collapse show" id="mainCookieInput">
+                <div class="collapse" id="mainCookieInput">
                     <div class="card p-4 mb-4">
                         <h5 class="card-title fw-bold mb-3">
                             <i class="fas fa-cookie-bite me-2"></i>Cookie Input & Parsing
@@ -455,6 +859,53 @@
             </div>
         </div>
 
+        <!-- Live Logs Panel -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="card-title fw-bold mb-0">
+                            <i class="fas fa-terminal me-2"></i>Live Logs
+                            <span class="badge bg-secondary ms-2" id="logCount">0</span>
+                        </h6>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input log-level" type="checkbox" id="showInfo" checked>
+                                <label class="form-check-label small text-info" for="showInfo">Info</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input log-level" type="checkbox" id="showWarning" checked>
+                                <label class="form-check-label small text-warning" for="showWarning">Warning</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input log-level" type="checkbox" id="showError" checked>
+                                <label class="form-check-label small text-danger" for="showError">Error</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input log-level" type="checkbox" id="showDebug">
+                                <label class="form-check-label small text-muted" for="showDebug">Debug</label>
+                            </div>
+                            <div class="form-check form-check-inline ms-3">
+                                <input class="form-check-input" type="checkbox" id="autoScroll" checked>
+                                <label class="form-check-label small" for="autoScroll">Auto-scroll</label>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary" id="pauseLogsBtn" title="Pause logs">
+                                <i class="fas fa-pause"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" id="clearLogsBtn" title="Clear logs">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="log-container bg-dark text-light p-2 rounded" id="liveLogs" style="min-height: 150px;">
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Loading logs...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Footer Status Bar -->
         <footer class="mt-4 pt-3 border-top">
             <div class="row">
@@ -639,10 +1090,10 @@
                             <div class="text-muted" style="font-size: 9px;">Cookie: ${account.cookie_count || 0}</div>
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary" onclick="refreshAccount('${account.id}')" title="刷新">
+                            <button class="btn btn-sm btn-outline-primary" onclick="refreshAccount('${account.id}')" title="Refresh">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline-success mt-1" onclick="verifyAccount('${account.name}')" title="验证Cookie">
+                            <button class="btn btn-sm btn-outline-success mt-1" onclick="verifyAccount('${account.name}')" title="Verify Cookie">
                                 <i class="fas fa-check-circle"></i>
                             </button>
                         </td>
@@ -670,12 +1121,12 @@
         // Update UI state (show/hide welcome card)
         function updateUIState() {
             const hasAccounts = systemState.accounts.length > 0;
-            const welcomeCard = document.querySelector('#mainCookieInput');
             const statusCard = document.getElementById('accountStatusCard');
             
             if (hasAccounts) {
-                // Has accounts: hide welcome card, show account status overview
-                welcomeCard?.classList.add('d-none');
+                // Has accounts: show account status overview
+                // Note: Cookie input collapse remains functional via Bootstrap toggle button
+                // We don't manipulate the collapse element directly to avoid breaking Bootstrap's toggle
                 if (statusCard) {
                     statusCard.classList.remove('d-none');
                     // Fill account status content
@@ -713,8 +1164,8 @@
                     `;
                 }
             } else {
-                // No accounts: show welcome card and Cookie input, hide status card
-                welcomeCard?.classList.remove('d-none');
+                // No accounts: hide status card
+                // Cookie input collapse is controlled by Bootstrap toggle button
                 statusCard?.classList.add('d-none');
             }
         }
@@ -1597,6 +2048,9 @@
                 });
         }
 
-</script>
+    </script>
+    
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

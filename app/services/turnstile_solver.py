@@ -12,32 +12,32 @@ logger = logging.getLogger(__name__)
 class TurnstileSolver:
     async def _human_mouse_move(self, page, start_x, start_y, end_x, end_y):
         """
-        模拟人类鼠标移动轨迹 (贝塞尔曲线 + 随机抖动 + 变速)
+        Simulate human mouse movement trajectory (Bezier curve + random jitter + variable speed)
         """
-        steps = random.randint(30, 60) # 步数增加，移动更平滑
+        steps = random.randint(30, 60) # Increase steps for smoother movement
         for i in range(steps):
             t = i / steps
-            # 贝塞尔曲线插值
+            # Bezier curve interpolation
             x = start_x + (end_x - start_x) * t
             y = start_y + (end_y - start_y) * t
             
-            # 添加正弦波抖动 (模拟手抖)
+            # Add sine wave jitter (simulate hand tremor)
             x += random.uniform(-2, 2) * math.sin(t * math.pi)
             y += random.uniform(-2, 2) * math.sin(t * math.pi)
             
             await page.mouse.move(x, y)
             
-            # 变速移动：中间快，两头慢
+            # Variable speed movement: fast in the middle, slow at both ends
             sleep_time = random.uniform(0.001, 0.01)
             if 0.2 < t < 0.8:
                 sleep_time /= 2
             await asyncio.sleep(sleep_time)
             
-        # 确保最后精准到达
+        # Ensure precise arrival at the end
         await page.mouse.move(end_x, end_y)
 
     async def _apply_stealth(self, page):
-        """注入隐身脚本，移除自动化特征"""
+        """Inject stealth script to remove automation fingerprints"""
         await page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             window.chrome = { runtime: {} };
@@ -52,7 +52,7 @@ class TurnstileSolver:
         """)
 
     async def get_token(self) -> str:
-        logger.info("启动 Playwright (完全拟人化模式)...")
+        logger.info("Starting Playwright (fully humanized mode)...")
         token_future = asyncio.get_running_loop().create_future()
         
         os.makedirs("/app/debug", exist_ok=True)
@@ -61,7 +61,7 @@ class TurnstileSolver:
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(
-                headless=True, # 调试时建议保持 True，依赖截图查看
+                headless=True, # Recommended to keep True for debugging, rely on screenshots
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
@@ -80,14 +80,14 @@ class TurnstileSolver:
             page = await context.new_page()
             await self._apply_stealth(page)
 
-            # --- 监听 Token ---
+            # --- Listen for Token ---
             async def handle_request(request):
                 if "/api/web/generate-basic" in request.url and request.method == "POST":
                     try:
                         post_data = request.post_data_json
                         if post_data and "turnstile_token" in post_data:
                             token = post_data["turnstile_token"]
-                            logger.info(f"🔥🔥🔥 捕获 Token: {token[:20]}...")
+                            logger.info(f"🔥🔥🔥 Captured Token: {token[:20]}...")
                             if not token_future.done():
                                 token_future.set_result(token)
                     except:
@@ -95,32 +95,32 @@ class TurnstileSolver:
             page.on("request", handle_request)
 
             try:
-                logger.info(f"访问: {settings.TARGET_URL}")
+                logger.info(f"Visiting: {settings.TARGET_URL}")
                 await page.goto(settings.TARGET_URL, wait_until="domcontentloaded", timeout=60000)
 
-                # 1. 输入 Prompt (保留原有逻辑)
+                # 1. Input Prompt (keep original logic)
                 try:
-                    logger.info("寻找输入框...")
+                    logger.info("Looking for input field...")
                     textarea = await page.wait_for_selector('textarea', state="visible", timeout=15000)
                     
-                    # 拟人化点击输入框
+                    # Humanized click on input field
                     box = await textarea.bounding_box()
                     if box:
                         await self._human_mouse_move(page, 0, 0, box['x'] + box['width']/2, box['y'] + box['height']/2)
                         await page.mouse.click(box['x'] + box['width']/2, box['y'] + box['height']/2)
                     
                     await asyncio.sleep(0.5)
-                    await page.keyboard.type("a cyberpunk cat", delay=random.randint(50, 150)) # 随机打字速度
+                    await page.keyboard.type("a cyberpunk cat", delay=random.randint(50, 150)) # Random typing speed
                     await asyncio.sleep(0.5)
                 except Exception as e:
-                    logger.warning(f"输入框操作异常: {e}")
+                    logger.warning(f"Input field operation exception: {e}")
 
-                # 2. 点击生成按钮 (保留原有逻辑)
+                # 2. Click generate button (keep original logic)
                 try:
-                    logger.info("点击生成按钮...")
+                    logger.info("Clicking generate button...")
                     btn = await page.wait_for_selector('button:has-text("Generate")', state="visible", timeout=5000)
                     
-                    # 拟人化点击按钮
+                    # Humanized click on button
                     box = await btn.bounding_box()
                     if box:
                         await self._human_mouse_move(page, 500, 500, box['x'] + box['width']/2, box['y'] + box['height']/2)
@@ -129,82 +129,82 @@ class TurnstileSolver:
                     else:
                         await btn.click()
                 except:
-                    logger.warning("未找到生成按钮")
+                    logger.warning("Generate button not found")
 
-                # 3. 验证码处理 (核心升级：反应时间 + 悬停 + 物理点击)
-                logger.info("进入验证码处理流程...")
+                # 3. CAPTCHA handling (core upgrade: reaction time + hover + physical click)
+                logger.info("Entering CAPTCHA handling process...")
                 
                 start_time = time.time()
                 clicked = False
                 
                 while not token_future.done():
                     if time.time() - start_time > 60:
-                        logger.error("验证超时")
+                        logger.error("Verification timeout")
                         break
                     
-                    # 检查是否有 Error
+                    # Check for Error
                     if await page.get_by_text("Error").is_visible():
-                        logger.error("页面显示 Error，刷新重试...")
+                        logger.error("Page shows Error, refreshing and retrying...")
                         await page.reload()
                         clicked = False
                         start_time = time.time()
                         await asyncio.sleep(3)
                         continue
 
-                    # 寻找 Cloudflare iframe 元素 (获取其在主页面的坐标)
+                    # Find Cloudflare iframe element (get its coordinates on the main page)
                     iframe_element = await page.query_selector("iframe[src*='challenges.cloudflare.com']")
                     
                     if iframe_element:
                         box = await iframe_element.bounding_box()
-                        # 确保 iframe 已经渲染出尺寸
+                        # Ensure iframe has rendered with dimensions
                         if box and box['width'] > 0 and box['height'] > 0:
                             if not clicked:
-                                logger.info(f"发现验证码 iframe，坐标: ({box['x']}, {box['y']})")
+                                logger.info(f"Found CAPTCHA iframe, coordinates: ({box['x']}, {box['y']})")
                                 await page.screenshot(path=f"{debug_prefix}_found.png")
 
-                                # --- 关键步骤 1: 反应时间 (Reaction Time) ---
+                                # --- Key Step 1: Reaction Time ---
                                 reaction_time = random.uniform(1.5, 3.0)
-                                logger.info(f"模拟人类反应时间: 发呆 {reaction_time:.2f} 秒...")
+                                logger.info(f"Simulating human reaction time: waiting {reaction_time:.2f} seconds...")
                                 await asyncio.sleep(reaction_time)
 
-                                # --- 关键步骤 2: 计算目标坐标 (左侧复选框位置 + 随机偏移) ---
-                                # Turnstile 宽约300，高约65。复选框在左边。
+                                # --- Key Step 2: Calculate target coordinates (left checkbox position + random offset) ---
+                                # Turnstile is about 300 wide, 65 high. Checkbox is on the left.
                                 target_x = box['x'] + 30 + random.uniform(-5, 5)
                                 target_y = box['y'] + (box['height'] / 2) + random.uniform(-5, 5)
                                 
-                                # --- 关键步骤 3: 拟人化移动 (Human Move) ---
-                                logger.info(f"移动鼠标至: ({target_x:.1f}, {target_y:.1f})")
-                                # 假设当前鼠标在屏幕中间附近，或者上一次点击的位置
+                                # --- Key Step 3: Humanized Movement ---
+                                logger.info(f"Moving mouse to: ({target_x:.1f}, {target_y:.1f})")
+                                # Assume current mouse is near center of screen, or at last click position
                                 await self._human_mouse_move(page, 960, 540, target_x, target_y)
 
-                                # --- 关键步骤 4: 悬停 (Hover) ---
+                                # --- Key Step 4: Hover ---
                                 hover_time = random.uniform(0.3, 0.8)
-                                logger.info(f"悬停确认: {hover_time:.2f} 秒...")
+                                logger.info(f"Hover confirmation: {hover_time:.2f} seconds...")
                                 await asyncio.sleep(hover_time)
 
-                                # --- 关键步骤 5: 物理点击 (Physical Click) ---
-                                logger.info("执行物理点击 (Down -> Sleep -> Up)...")
+                                # --- Key Step 5: Physical Click ---
+                                logger.info("Executing physical click (Down -> Sleep -> Up)...")
                                 await page.mouse.down()
-                                await asyncio.sleep(random.uniform(0.08, 0.15)) # 模拟按键时长
+                                await asyncio.sleep(random.uniform(0.08, 0.15)) # Simulate key press duration
                                 await page.mouse.up()
                                 
                                 clicked = True
-                                logger.info("点击完成，等待验证通过...")
+                                logger.info("Click completed, waiting for verification to pass...")
                                 await page.screenshot(path=f"{debug_prefix}_clicked.png")
                                 
                             else:
-                                # 已经点过了，正在等待结果
+                                # Already clicked, waiting for result
                                 pass
                         else:
-                            # iframe 存在但还没展开
+                            # iframe exists but hasn't expanded yet
                             pass
                     else:
-                        # 还没找到 iframe
+                        # iframe not found yet
                         pass
 
-                    # 如果点击后 20 秒还没反应，重置状态重试
+                    # If no response 20 seconds after clicking, reset state and retry
                     if clicked and (time.time() - start_time) % 20 < 1:
-                         logger.info("等待过久，重置状态准备重试...")
+                         logger.info("Waited too long, resetting state to retry...")
                          clicked = False
 
                     await asyncio.sleep(1)
@@ -214,7 +214,7 @@ class TurnstileSolver:
                 return ""
 
             except Exception as e:
-                logger.error(f"流程出错: {e}")
+                logger.error(f"Process error: {e}")
                 await page.screenshot(path=f"{debug_prefix}_error.png")
                 return ""
             finally:
